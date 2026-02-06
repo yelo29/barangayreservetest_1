@@ -1,0 +1,40 @@
+# Firebase Storage Rules - DISABLED
+# We are using Cloudinary for image uploads instead of Firebase Storage
+# Firebase Storage requires billing, so we're using the free Cloudinary service
+
+# This file is kept for reference but will not be deployed
+# All image uploads will be handled by Cloudinary service
+
+# If you later decide to use Firebase Storage, you can uncomment and deploy these rules:
+/*
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isResident() {
+      return isAuthenticated() &&
+             firestore.exists(/databases/(default)/documents/users/$(request.auth.uid)) &&
+             firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'resident';
+    }
+
+    function isOfficial() {
+      return isAuthenticated() &&
+             firestore.exists(/databases/(default)/documents/users/$(request.auth.uid)) &&
+             firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'official';
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Default deny for any other paths
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
+*/

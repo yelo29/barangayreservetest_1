@@ -1,0 +1,50 @@
+{
+  "captain@barangay.gov": {
+    "password": "tatalaPunongBarangayadmin",
+    "full_name": "Punong Barangay (Barangay Captain)",
+    "role": "official",
+    "verified": true,
+    "discount_rate": 0.0,
+    "id": "captain@barangay.gov"
+  },
+  "secretary@barangay.gov": {
+    "password": "tatalaSecretaryadmin",
+    "full_name": "Barangay Secretary",
+    "role": "official",
+    "verified": true,
+    "discount_rate": 0.0,
+    "id": "secretary@barangay.gov"
+  },
+  "administrator@barangay.gov": {
+    "password": "tatalaAdministratoradmin",
+    "full_name": "Barangay Administrator",
+    "role": "official",
+    "verified": true,
+    "discount_rate": 0.0,
+    "id": "administrator@barangay.gov"
+  },
+  "kagawad1@barangay.gov": {
+    "password": "tatalaKagawad1admin",
+    "full_name": "Barangay Councilor (Bookings)",
+    "role": "official",
+    "verified": true,
+    "discount_rate": 0.0,
+    "id": "kagawad1@barangay.gov"
+  },
+  "planning@barangay.gov": {
+    "password": "tatalaPlanningOfficeradmin",
+    "full_name": "Barangay Planning Officer",
+    "role": "official",
+    "verified": true,
+    "discount_rate": 0.0,
+    "id": "planning@barangay.gov"
+  },
+  "utility@barangay.gov": {
+    "password": "tatalaUtilityadmin",
+    "full_name": "Barangay Utility Worker",
+    "role": "official",
+    "verified": true,
+    "discount_rate": 0.0,
+    "id": "utility@barangay.gov"
+  }
+}

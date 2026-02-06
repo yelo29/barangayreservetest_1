@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "480077676750",
+    "project_id": "barangay-reserve-cloud",
+    "storage_bucket": "barangay-reserve-cloud.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:480077676750:android:4c0aa16a7d2afae4e5d09f",
+        "android_client_info": {
+          "package_name": "ph.barangay.reserve"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "480077676750-j7mpfdkc0tltventasiriqgm5aj0bkbf.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCEaz-8zUnykMDksmrfXenXBrnDxcuDdrA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "480077676750-j7mpfdkc0tltventasiriqgm5aj0bkbf.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

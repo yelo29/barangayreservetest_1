@@ -1,0 +1,9 @@
+authtoken: 3976aR0q9u2A9Q9pdLk8yJw1Nrz_NYhzp636M8cnUbJvA4TW
+
+version: 2
+
+tunnels:
+  barangay-api:
+    proto: http
+    addr: 8080
+    domain: unstanding-unmenaced-pete
