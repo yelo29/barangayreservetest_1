@@ -1,0 +1,7 @@
+# QUICK FIX: Add intl package to pubspec.yaml
+# Run: flutter pub get
+
+dependencies:
+  flutter:
+    sdk: flutter
+  intl: ^0.18.0

@@ -1,0 +1,30 @@
+#!/usr/bin/env python3
+"""
+Instructions to clear app cache and fix loading screen issue
+"""
+
+print("🔧 Fix Loading Screen Issue")
+print("=" * 40)
+print()
+print("🚨 Problem: App is stuck loading because:")
+print("   - Cached DuckDNS URL (doesn't work)")
+print("   - Saved login token")
+print("   - Trying to authenticate with broken URL")
+print()
+print("✅ Solution: Clear app data")
+print()
+print("📱 Steps:")
+print("1. Settings → Apps → Barangay Reserve")
+print("2. Storage → Clear Data")
+print("3. Force Stop the app")
+print("4. Open app fresh")
+print("5. Configure server: http://192.168.100.4:8080")
+print("6. Test connection → Should work!")
+print("7. Login with credentials")
+print()
+print("🎯 Result: App will load properly!")
+print()
+print("⚡ Alternative: Use ngrok for global access")
+print("1. Run: ngrok http 8080")
+print("2. Use ngrok URL in app")
+print("3. Works from anywhere!")

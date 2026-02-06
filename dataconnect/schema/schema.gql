@@ -1,0 +1,53 @@
+type User @table {
+  displayName: String!
+  email: String!
+  createdAt: Timestamp!
+  photoUrl: String
+  bio: String
+  location: String
+  isBusinessOwner: Boolean
+  isCommunityOrganizer: Boolean
+}
+
+type NewsItem @table {
+  title: String!
+  content: String!
+  createdAt: Timestamp!
+  poster: User
+  imageUrl: String
+  category: String
+}
+
+type Event @table {
+  name: String!
+  description: String!
+  eventDate: Timestamp!
+  location: String!
+  createdAt: Timestamp!
+  organizer: User
+  imageUrl: String
+  category: String
+  contactInfo: String
+}
+
+type Business @table {
+  name: String!
+  address: String!
+  contactNumber: String!
+  category: String!
+  createdAt: Timestamp!
+  owner: User
+  description: String
+  website: String
+  operatingHours: String
+  imageUrl: String
+}
+
+type ForumPost @table {
+  title: String!
+  content: String!
+  createdAt: Timestamp!
+  author: User
+  parentPost: ForumPost
+  category: String
+}

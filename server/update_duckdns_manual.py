@@ -1,0 +1,31 @@
+#!/usr/bin/env python3
+"""
+Manual DuckDNS Update Instructions
+"""
+
+print("🦆 DuckDNS Manual Update Instructions")
+print("=" * 50)
+print()
+print("🔧 STEP 1: Update DuckDNS IP Manually")
+print("1. Go to: https://duckdns.org")
+print("2. Login with your account")
+print("3. Find 'barangay-reserve' domain")
+print("4. Click 'update ip' button")
+print("5. Wait 2-3 minutes for propagation")
+print()
+print("🔧 STEP 2: Test DuckDNS Resolution")
+print("1. Open browser: http://barangay-reserve.duckdns.org:8080/api/me?email=test@example.com")
+print("2. Should see: {'error': 'User not found', 'success': false}")
+print()
+print("🔧 STEP 3: Update App to Use DuckDNS")
+print("1. Open app → Server Configuration")
+print("2. Enter: http://barangay-reserve.duckdns.org:8080")
+print("3. Test Connection → Should work!")
+print("4. Save Configuration")
+print()
+print("🌐 RESULT: Global server access from anywhere!")
+print()
+print("📍 Current Status:")
+print("- Local IP: 192.168.100.4 (works only on same network)")
+print("- DuckDNS IP: 110.93.84.131 (wrong IP - needs update)")
+print("- After update: Will work from ANY network in the world!")

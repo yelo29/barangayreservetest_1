@@ -1,0 +1,721 @@
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import '../../../services/data_service.dart';
+import '../../../services/auth_api_service.dart';
+import '../../../services/api_service.dart' as api_service;
+import '../../../widgets/loading_widget.dart';
+import '../../../utils/debug_logger.dart';
+import '../../../widgets/facility_icon.dart';
+import '../../../widgets/timeslot_dialog.dart';
+import '../../../screens/official_booking_form_screen.dart';
+import '../../../widgets/enhanced_calendar.dart';
+import '../../../screens/booking_form_screen.dart';
+import 'facility_edit_screen.dart';
+import 'official_calendar_screen.dart';
+
+class OfficialHomeTab extends StatefulWidget {
+  const OfficialHomeTab({super.key});
+
+  @override
+  State<OfficialHomeTab> createState() => _OfficialHomeTabState();
+}
+
+class _OfficialHomeTabState extends State<OfficialHomeTab> {
+  List<Map<String, dynamic>> _facilities = [];
+  Map<String, List<Map<String, dynamic>>> _pendingBookings = {};
+  Map<String, List<Map<String, dynamic>>> _approvedBookings = {};
+  bool _isLoading = true;
+  final AuthApiService _authApiService = AuthApiService();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFacilities();
+  }
+
+  Future<void> _loadFacilities() async {
+    try {
+      DebugLogger.ui('Loading official dashboard facilities...');
+
+      // Use DataService for consistent data fetching
+      final facilitiesResponse = await DataService.fetchFacilities();
+      
+      if (facilitiesResponse['success'] == true) {
+        final List<Map<String, dynamic>> facilitiesList = facilitiesResponse['data'] ?? [];
+        
+        // Load all bookings for status display
+        await _loadBookingData();
+
+        if (mounted) {
+          setState(() {
+            _facilities = facilitiesList.where((facility) {
+              try {
+                final isActive = facility['active'] != false;
+                DebugLogger.ui(
+                  'Official Facility ${facility['name']} - active: $isActive',
+                );
+                return isActive;
+              } catch (e) {
+                DebugLogger.ui('Error processing facility: $e');
+                DebugLogger.ui('Facility data: $facility');
+                return false;
+              }
+            }).toList();
+            _isLoading = false;
+            DebugLogger.ui(
+              'Loaded ${_facilities.length} active facilities for official',
+            );
+          });
+        }
+      } else {
+        throw Exception(facilitiesResponse['error'] ?? 'Failed to fetch facilities');
+      }
+    } catch (e) {
+      DebugLogger.error('Error loading official facilities: $e');
+      if (mounted) {
+        setState(() {
+          _facilities = [];
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadBookingData() async {
+    try {
+      print('🔍 OfficialHomeTab._loadBookingData - fetching all bookings...');
+      
+      // Use DataService for consistent data fetching (officials see all bookings)
+      final bookingsResponse = await DataService.fetchBookings();
+      
+      if (bookingsResponse['success'] == true) {
+        final List<Map<String, dynamic>> allBookings = bookingsResponse['data'] ?? [];
+        final pendingBookings = allBookings.where((booking) => booking['status'] == 'pending').toList();
+        final approvedBookings = allBookings.where((booking) => booking['status'] == 'approved').toList();
+
+        print('🔍 OfficialHomeTab - pending bookings total: ${pendingBookings.length}');
+        print('🔍 OfficialHomeTab - approved bookings total: ${approvedBookings.length}');
+
+        // Group bookings by date (for all facilities since officials see all)
+        Map<String, List<Map<String, dynamic>>> pending = {};
+        Map<String, List<Map<String, dynamic>>> approved = {};
+
+        for (var booking in pendingBookings) {
+          final date = booking['booking_date']?.toString() ?? '';
+          if (date.isNotEmpty) {
+            pending.putIfAbsent(date, () => []);
+            pending[date]!.add(booking);
+          }
+        }
+
+        for (var booking in approvedBookings) {
+          final date = booking['booking_date']?.toString() ?? '';
+          if (date.isNotEmpty) {
+            approved.putIfAbsent(date, () => []);
+            approved[date]!.add(booking);
+          }
+        }
+
+        if (mounted) {
+          setState(() {
+            _pendingBookings = pending;
+            _approvedBookings = approved;
+          });
+        }
+      } else {
+        throw Exception(bookingsResponse['error'] ?? 'Failed to fetch bookings');
+      }
+    } catch (e) {
+      print('❌ OfficialHomeTab._loadBookingData - Error: $e');
+      if (mounted) {
+        setState(() {
+          _pendingBookings = {};
+          _approvedBookings = {};
+        });
+      }
+    }
+  }
+
+  Map<String, String> _buildFacilityBookingStatuses(Map<String, dynamic> facility) {
+    final Map<String, String> statuses = {};
+    final facilityId = facility['id'];
+
+    // Filter bookings for this specific facility
+    final facilityPendingBookings = <String, List<Map<String, dynamic>>>{};
+    final facilityApprovedBookings = <String, List<Map<String, dynamic>>>{};
+
+    // Filter pending bookings for this facility
+    _pendingBookings.forEach((date, bookings) {
+      final facilityBookings = bookings.where((booking) => 
+        booking['facility_id'] == facilityId
+      ).toList();
+      
+      if (facilityBookings.isNotEmpty) {
+        facilityPendingBookings[date] = facilityBookings;
+      }
+    });
+
+    // Filter approved bookings for this facility
+    _approvedBookings.forEach((date, bookings) {
+      final facilityBookings = bookings.where((booking) => 
+        booking['facility_id'] == facilityId
+      ).toList();
+      
+      if (facilityBookings.isNotEmpty) {
+        facilityApprovedBookings[date] = facilityBookings;
+      }
+    });
+
+    // Add pending bookings for this facility
+    facilityPendingBookings.forEach((date, bookings) {
+      final formattedDate = _formatDateForCalendar(date);
+      statuses[formattedDate] = 'pending';
+      print('🔍 Adding facility pending date: $date -> $formattedDate (Facility: ${facility['name']})');
+    });
+
+    // Add approved bookings for this facility (overrides pending if exists)
+    facilityApprovedBookings.forEach((date, bookings) {
+      final formattedDate = _formatDateForCalendar(date);
+      statuses[formattedDate] = 'approved';
+      print('🔍 Adding facility approved date: $date -> $formattedDate (Facility: ${facility['name']})');
+    });
+
+    print('🔍 Facility ${facility['name']} booking statuses - total: ${statuses.length}');
+    return statuses;
+  }
+
+  Map<String, String> _buildBookingStatuses() {
+    final Map<String, String> statuses = {};
+
+    // Add pending bookings
+    _pendingBookings.forEach((date, bookings) {
+      final formattedDate = _formatDateForCalendar(date);
+      statuses[formattedDate] = 'pending';
+      print('🔍 Adding pending date: $date -> $formattedDate');
+    });
+
+    // Add approved bookings (overrides pending if exists)
+    _approvedBookings.forEach((date, bookings) {
+      final formattedDate = _formatDateForCalendar(date);
+      statuses[formattedDate] = 'approved';
+      print('🔍 Adding approved date: $date -> $formattedDate');
+    });
+
+    print('🔍 OfficialHomeTab._buildBookingStatuses - total statuses: ${statuses.length}');
+    print('🔍 Status map keys: ${statuses.keys.toList()}');
+    return statuses;
+  }
+
+  String _formatDateForCalendar(String dateStr) {
+    try {
+      final DateTime date = DateTime.parse(dateStr);
+      // Use the same format as enhanced calendar expects
+      return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+    } catch (e) {
+      print('❌ Error parsing date: $dateStr - $e');
+      return dateStr;
+    }
+  }
+
+  void _quickBookFacility(Map<String, dynamic> facility) async {
+    // Show enhanced calendar dialog
+    final DateTime? selectedDate = await showDialog<DateTime>(
+      context: context,
+      builder: (ctx) => Dialog(
+        child: SizedBox(
+          width: MediaQuery.of(context).size.width * 0.9,
+          height: MediaQuery.of(context).size.height * 0.75,
+          child: EnhancedCalendar(
+            selectedDate: DateTime.now(),
+            bookingStatuses: _buildFacilityBookingStatuses(facility), // Use facility-specific booking status
+            pendingColor: Colors.yellow,
+            bookedColor: Colors.green.shade200,
+            availableColor: Colors.grey.shade100,
+            selectedColor: Colors.blue,
+            showTodayButton: false,
+            onDateSelected: (date) {
+              Navigator.pop(ctx, date);
+            },
+          ),
+        ),
+      ),
+    );
+
+    if (selectedDate != null) {
+      // Navigate to official booking form instead of instant booking
+      final currentUser = await _authApiService.getCurrentUser();
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => OfficialBookingFormScreen(
+            facility: facility,
+            selectedDate: selectedDate,
+            userData: currentUser,
+          ),
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: Column(
+                children: [
+                  // Quick Booking Section
+                  Container(
+                    height: 300, // Fixed height for Quick Booking section
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.pink.shade50,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.red.shade200),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.flash_on,
+                              color: Colors.red.shade700,
+                              size: 24,
+                            ),
+                            const SizedBox(width: 8),
+                            const Text(
+                              'Quick Booking',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.red,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Instant booking for officials (auto-approved)',
+                          style: TextStyle(fontSize: 14, color: Colors.grey),
+                        ),
+                        const SizedBox(height: 16),
+                        Expanded(
+                          child: _facilities.isEmpty
+                              ? Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.business,
+                                        size: 64,
+                                        color: Colors.grey.shade400,
+                                      ),
+                                      const SizedBox(height: 16),
+                                      Text(
+                                        'No facilities found',
+                                        style: TextStyle(
+                                          fontSize: 18,
+                                          color: Colors.grey.shade600,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        'Tap the + button to add your first facility',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          color: Colors.grey.shade500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              : ListView.builder(
+                                  itemCount: _facilities.length,
+                                  itemBuilder: (context, index) {
+                                    final facility = _facilities[index];
+                                    return Container(
+                                      margin: const EdgeInsets.only(bottom: 12),
+                                      child: Card(
+                                        elevation: 2,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                        color: Colors.blue.shade50,
+                                        child: InkWell(
+                                          onTap: () => _quickBookFacility(facility),
+                                          borderRadius: BorderRadius.circular(12),
+                                          child: Padding(
+                                            padding: const EdgeInsets.all(12.0),
+                                            child: Row(
+                                              children: [
+                                                FacilityIcon(
+                                                  iconName:
+                                                      facility['main_photo_url'] ??
+                                                      'location_city',
+                                                  size: 40,
+                                                  color: Colors.red.shade600,
+                                                ),
+                                                const SizedBox(width: 12),
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment.start,
+                                                    children: [
+                                                      Text(
+                                                        facility['name'] ??
+                                                            'Unknown Facility',
+                                                        style: const TextStyle(
+                                                          fontSize: 16,
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                        ),
+                                                      ),
+                                                      const SizedBox(height: 4),
+                                                      Text(
+                                                        'Book entire day instantly',
+                                                        style: TextStyle(
+                                                          fontSize: 12,
+                                                          color: Colors.grey[600],
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                                Container(
+                                                  padding: const EdgeInsets
+                                                      .symmetric(
+                                                    horizontal: 12,
+                                                    vertical: 6,
+                                                  ),
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.red.shade600,
+                                                    borderRadius:
+                                                        BorderRadius.circular(20),
+                                                  ),
+                                                  child: Text(
+                                                        'Quick Book Day',
+                                                        style: TextStyle(
+                                                          color: Colors.white,
+                                                          fontSize: 12,
+                                                          fontWeight: FontWeight.bold,
+                                                        ),
+                                                      ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  // Facility Management Section
+                  Container(
+                    height: 400, // Fixed height for Manage Facilities section
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.orange.shade200),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.settings,
+                              color: Colors.orange.shade700,
+                              size: 24,
+                            ),
+                            const SizedBox(width: 8),
+                            const Text(
+                              'Manage Facilities',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.orange,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Expanded(
+                          child: _facilities.isEmpty
+                              ? Center(
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(16.0),
+                                    child: Text(
+                                      'Add your first facility using the + button',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: Colors.grey.shade500,
+                                      ),
+                                    ),
+                                  ),
+                                )
+                              : ListView.builder(
+                                  itemCount: _facilities.length,
+                                  itemBuilder: (context, index) {
+                                    final facility = _facilities[index];
+                                    return Container(
+                                      margin: const EdgeInsets.only(bottom: 12),
+                                      child: Card(
+                                        elevation: 2,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                        child: InkWell(
+                                          onTap: () => _editFacility(facility),
+                                          borderRadius: BorderRadius.circular(12),
+                                          child: Padding(
+                                            padding: const EdgeInsets.all(12.0),
+                                            child: Row(
+                                              children: [
+                                                FacilityIcon(
+                                                  iconName:
+                                                      facility['main_photo_url'] ??
+                                                      'location_city',
+                                                  size: 32,
+                                                  color: Colors.red.shade700,
+                                                ),
+                                                const SizedBox(width: 12),
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    mainAxisAlignment: MainAxisAlignment.center,
+                                                    children: [
+                                                      Text(
+                                                        facility['name']?.toString() ??
+                                                            'Unknown Facility',
+                                                        style: const TextStyle(
+                                                          fontWeight: FontWeight.bold,
+                                                          fontSize: 14,
+                                                        ),
+                                                        maxLines: 2,
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                      const SizedBox(height: 6),
+                                                      Text(
+                                                        '₱${facility['price']?.toString() ?? '0'}',
+                                                        style: const TextStyle(
+                                                          color: Colors.grey,
+                                                          fontSize: 12,
+                                                        ),
+                                                      ),
+                                                      const SizedBox(height: 8),
+                                                      Container(
+                                                        child: Row(
+                                                          mainAxisSize: MainAxisSize.min,
+                                                          children: [
+                                                            Container(
+                                                              padding: const EdgeInsets.symmetric(
+                                                                horizontal: 8,
+                                                                vertical: 2,
+                                                              ),
+                                                              decoration: BoxDecoration(
+                                                                color: Colors.red.shade100,
+                                                                borderRadius: BorderRadius.circular(6),
+                                                              ),
+                                                              child: GestureDetector(
+                                                                onTap: () => _editFacility(facility),
+                                                                child: const Text(
+                                                                  'Edit',
+                                                                  style: TextStyle(
+                                                                    color: Colors.red,
+                                                                    fontSize: 10,
+                                                                    fontWeight: FontWeight.bold,
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                            ),
+                                                            const SizedBox(width: 8),
+                                                            Container(
+                                                              padding: const EdgeInsets.symmetric(
+                                                                horizontal: 8,
+                                                                vertical: 2,
+                                                              ),
+                                                              decoration: BoxDecoration(
+                                                                color: Colors.red.shade100,
+                                                                borderRadius: BorderRadius.circular(6),
+                                                              ),
+                                                              child: GestureDetector(
+                                                                onTap: () => _deleteFacility(facility),
+                                                                child: const Text(
+                                                                  'Delete',
+                                                                  style: TextStyle(
+                                                                    color: Colors.red,
+                                                                    fontSize: 10,
+                                                                    fontWeight: FontWeight.bold,
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ), // Column children
+            ), // SingleChildScrollView
+      floatingActionButton: FloatingActionButton(
+        onPressed: _addNewFacility,
+        backgroundColor: Colors.red,
+        child: const Icon(Icons.add, color: Colors.white),
+        tooltip: 'Add New Facility',
+      ),
+    );
+  }
+
+  void _viewFacilityCalendar(Map<String, dynamic> facility) async {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => OfficialCalendarScreen(facility: facility),
+      ),
+    );
+  }
+
+  void _addNewFacility() async {
+    // Navigate to facility edit screen with null for new facility
+    final bool? result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const FacilityEditScreen(facility: null),
+      ),
+    );
+
+    if (result == true) {
+      _loadFacilities(); // Refresh the facility list
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Facility added successfully')),
+      );
+    }
+  }
+
+  void _editFacility(Map<String, dynamic> facility) async {
+    // Navigate to facility edit screen with existing facility data
+    final bool? result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => FacilityEditScreen(facility: facility),
+      ),
+    );
+
+    if (result == true) {
+      _loadFacilities(); // Refresh the facility list
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Facility updated successfully')),
+      );
+    }
+  }
+
+  void _deleteFacility(Map<String, dynamic> facility) async {
+    // Show confirmation dialog
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Facility'),
+        content: Text('Are you sure you want to delete "${facility['name']}"?\n\nThis action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      // Show loading indicator
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 20),
+              Text('Deleting facility...'),
+            ],
+          ),
+        ),
+      );
+
+      try {
+        // Use DataService for consistent facility management
+        final result = await DataService.fetchFacilities();
+        
+        // Close loading dialog
+        Navigator.pop(context);
+        
+        // Show result
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text(result['success'] ? 'Success' : 'Error'),
+            content: Text(result['success'] 
+                ? 'Facility deleted successfully!' 
+                : result['error'] ?? 'Failed to delete facility'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+        
+        // Refresh facilities list if successful
+        if (result['success']) {
+          _loadFacilities();
+        }
+      } catch (e) {
+        // Close loading dialog
+        Navigator.pop(context);
+        
+        // Show error
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Error'),
+            content: Text('Failed to delete facility: $e'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+    }
+  }
+}
