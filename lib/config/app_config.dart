@@ -2,8 +2,8 @@
 /// Laptop as server with barangay.db database
 
 class AppConfig {
-  // ngrok public URL for mobile data access (works from anywhere)
-  static String _baseUrl = 'https://intershifting-nakisha-nonspaciously.ngrok-free.dev';
+  // Use actual computer IP and correct port from server log
+  static String _baseUrl = 'http://192.168.100.4:8000';
   
   /// Get the current base URL
   static String get baseUrl => _baseUrl;

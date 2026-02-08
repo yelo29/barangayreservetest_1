@@ -214,13 +214,15 @@ class Base64ImageService {
   static String? extractBase64(String? storedData) {
     if (storedData == null || storedData.isEmpty) return null;
     
+    // Remove excessive debug logging for better performance
+    // print('🔍 DEBUG: extractBase64 called with: ${storedData.substring(0, storedData.length > 100 ? 100 : storedData.length)}...');
+    
     // First try to extract from data URL format (data:image/jpeg;base64,xxxxx)
     if (storedData.startsWith('data:image/')) {
       final commaIndex = storedData.indexOf(',');
       if (commaIndex != -1 && commaIndex + 1 < storedData.length) {
         final base64Part = storedData.substring(commaIndex + 1);
         if (isValidBase64Image(base64Part)) {
-          print('✅ Extracted base64 from data URL: ${(base64Part.length / 1024).toStringAsFixed(2)} KB');
           return base64Part;
         }
       }
@@ -247,7 +249,8 @@ class Base64ImageService {
       // If that didn't work, maybe the whole thing is stored differently
       print('⚠️ JSON structure different than expected: ${imageData.keys}');
     } catch (e) {
-      print('⚠️ Could not extract base64: $e');
+      print('❌ Could not extract base64: $e');
+      print('❌ Error details: ${e.runtimeType}');
       // Not JSON-wrapped, might be corrupted data
     }
     

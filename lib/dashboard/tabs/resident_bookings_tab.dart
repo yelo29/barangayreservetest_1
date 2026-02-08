@@ -245,6 +245,20 @@ class _ResidentBookingsTabState extends State<ResidentBookingsTab> {
     final facilityName = booking['facility_name'] ?? booking['facilityName'] ?? 'Unknown Facility';
     
     print('🔍 _buildBookingCard: $facilityName'); // Debug logging
+    
+    // Debug logging for rejection processing
+    final statusText = status.toUpperCase();
+    print('🔥🔥🔥 ResidentBookingsTab: Processing booking ID ${booking['id']}');
+    print('🔥🔥🔥 ResidentBookingsTab: Status: "$status" -> "$statusText"');
+    print('🔥🔥🔥 ResidentBookingsTab: Is REJECTED? ${statusText == 'REJECTED'}');
+    print('🔥🔥🔥 ResidentBookingsTab: Has rejection_reason? ${booking['rejection_reason'] != null}');
+    if (booking['rejection_reason'] != null) {
+      print('🔥🔥🔥 ResidentBookingsTab: Rejection reason: "${booking['rejection_reason']}"');
+    }
+    
+    if (statusText == 'REJECTED') {
+      print('🔥🔥🔥 ResidentBookingsTab: === WILL DISPLAY REJECTION SECTION ===');
+    }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -364,6 +378,46 @@ class _ResidentBookingsTabState extends State<ResidentBookingsTab> {
                       style: const TextStyle(
                         fontSize: 14,
                         color: Colors.black87,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
+            // Rejection Reason/Apology Message for REJECTED bookings
+            if (status.toUpperCase() == 'REJECTED') ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.red.shade200),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.warning, size: 16, color: Colors.red.shade600),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Booking Rejected',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.red.shade700,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      booking['rejection_reason'] ?? 'This date has been booked by Officials, refund of your payments will be done shortly, check your email or SMS for further details.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.red.shade600,
                       ),
                     ),
                   ],

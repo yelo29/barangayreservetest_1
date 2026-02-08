@@ -3,36 +3,31 @@ import sqlite3
 conn = sqlite3.connect('barangay.db')
 cursor = conn.cursor()
 
-# Get user ID for jl052904@gmail.com
-cursor.execute('SELECT id FROM users WHERE email = "jl052904@gmail.com"')
-user_result = cursor.fetchone()
-user_id = user_result[0] if user_result else None
+print('🔍 Checking all users:')
+cursor.execute('SELECT id, email, full_name FROM users LIMIT 5')
+users = cursor.fetchall()
+for user in users:
+    print(f'ID: {user[0]}, Email: {user[1]}, Name: {user[2]}')
 
-print(f'User ID for jl052904@gmail.com: {user_id}')
+print('\n🔍 Checking verification_requests table:')
+cursor.execute('SELECT COUNT(*) FROM verification_requests')
+total = cursor.fetchone()[0]
+print(f'Total requests: {total}')
 
-if user_id:
-    # Check verification requests for this user
-    cursor.execute('SELECT * FROM verification_requests WHERE resident_id = ? ORDER BY submitted_at DESC LIMIT 1', (user_id,))
+if total > 0:
+    cursor.execute('SELECT id, user_id, verification_type, status, created_at FROM verification_requests LIMIT 5')
+    requests = cursor.fetchall()
+    for req in requests:
+        print(f'ID: {req[0]}, User: {req[1]}, Type: {req[2]}, Status: {req[3]}, Created: {req[4]}')
+    
+    print('\n🔍 Full verification request details:')
+    cursor.execute('SELECT * FROM verification_requests LIMIT 1')
     request = cursor.fetchone()
-    print('\nLatest verification request:')
     if request:
         columns = [description[0] for description in cursor.description]
         for i, col in enumerate(columns):
             print(f'{col}: {request[i]}')
-    else:
-        print('No verification request found')
-
-    print('\n' + '='*50 + '\n')
-
-    # Check current user data
-    cursor.execute('SELECT * FROM users WHERE id = ?', (user_id,))
-    user = cursor.fetchone()
-    print('Current user data:')
-    if user:
-        columns = [description[0] for description in cursor.description]
-        for i, col in enumerate(columns):
-            print(f'{col}: {user[i]}')
-    else:
-        print('No user found')
+else:
+    print('No verification requests found')
 
 conn.close()

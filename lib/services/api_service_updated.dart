@@ -347,10 +347,11 @@ class ApiService {
   }
 
   // Update verification status
-  static Future<Map<String, dynamic>> updateVerificationStatus(int requestId, String status, {String? notes, String? rejectionReason}) async {
+  static Future<Map<String, dynamic>> updateVerificationStatus(int requestId, String status, {String? notes, String? rejectionReason, String? discountRate}) async {
     try {
       Map<String, dynamic> updateData = {
         'status': status,
+        'updatedAt': DateTime.now().toIso8601String(),
       };
       
       if (notes != null) {
@@ -361,8 +362,12 @@ class ApiService {
         updateData['rejection_reason'] = rejectionReason;
       }
       
+      if (discountRate != null) {
+        updateData['discountRate'] = double.parse(discountRate);
+      }
+      
       final response = await http.put(
-        Uri.parse('$baseUrl/api/verification-requests/$requestId/status'),
+        Uri.parse('$baseUrl/api/verification-requests/$requestId'),
         headers: await getHeaders(),
         body: json.encode(updateData),
       );

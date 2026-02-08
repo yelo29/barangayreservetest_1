@@ -341,9 +341,11 @@ class _ResidentHomePageState extends State<ResidentHomePage> {
             bookingStatuses: _buildBookingStatusesForFacility(facility.id),
             pendingColor: Colors.orange.shade200,
             bookedColor: Colors.green.shade200,
-            availableColor: Colors.grey.shade100,
+            availableColor: Colors.white,
             selectedColor: Colors.blue,
             showTodayButton: true,
+            currentUserEmail: widget.userData?['email'],
+            currentUserRole: widget.userData?['role'],
             isDateEnabled: (date) {
               // Check if date is in past
               if (date.isBefore(DateTime.now())) {
