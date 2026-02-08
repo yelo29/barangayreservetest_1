@@ -155,6 +155,8 @@ class _OfficialCalendarScreenState extends State<OfficialCalendarScreen> {
                       );
                     },
                     bookingStatuses: _buildBookingStatuses(),
+                    currentUserEmail: _currentUser?['email'],
+                    currentUserRole: _currentUser?['role'],
                   ),
                 ),
               ],

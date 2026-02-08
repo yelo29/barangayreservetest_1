@@ -30,7 +30,10 @@ class MyBookingsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    print('🔍 MyBookingsPage.build() called with ${bookings.length} bookings');
+    
     if (bookings.isEmpty) {
+      print('🔍 MyBookingsPage: No bookings to display');
       return const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -46,11 +49,13 @@ class MyBookingsPage extends StatelessWidget {
       );
     }
 
+    print('🔍 MyBookingsPage: Building ListView with ${bookings.length} bookings');
     return ListView.builder(
       padding: const EdgeInsets.all(16.0),
       itemCount: bookings.length,
       itemBuilder: (context, index) {
         final booking = bookings[index];
+        print('🔍 MyBookingsPage: Building booking card $index - ID: ${booking['id']}');
         print('🔍 Booking data: $booking'); // Debug logging
         
         // Enhanced field mapping with fallbacks
@@ -86,6 +91,25 @@ class MyBookingsPage extends StatelessWidget {
                      '0';
         
         final status = booking['status'] as String? ?? 'pending';
+        final statusText = status.toUpperCase();
+        
+        print('🔍🔍🔍 MyBookingsPage: Processing booking ID ${booking['id']}');
+        print('🔍🔍🔍 MyBookingsPage: Status: "$status" -> "$statusText"');
+        print('🔍🔍🔍 MyBookingsPage: Is REJECTED? ${statusText == 'REJECTED'}');
+        print('🔍🔍🔍 MyBookingsPage: Has rejection_reason? ${booking['rejection_reason'] != null}');
+        if (booking['rejection_reason'] != null) {
+          print('🔍🔍🔍 MyBookingsPage: Rejection reason length: ${booking['rejection_reason'].toString().length}');
+          print('🔍🔍🔍 MyBookingsPage: Rejection reason preview: "${booking['rejection_reason'].toString().substring(0, 50)}..."');
+        }
+        
+        // Debug for rejection display
+        if (statusText == 'REJECTED') {
+          print('🔍🔍🔍 MyBookingsPage: === WILL DISPLAY REJECTION SECTION ===');
+          print('🔍🔍🔍 MyBookingsPage: Checking rejection display for booking ID ${booking['id']} - statusText: "$statusText"');
+          print('🔍🔍🔍 MyBookingsPage: ENTERING REJECTED DISPLAY for booking ID ${booking['id']}');
+        } else {
+          print('🔍🔍🔍 MyBookingsPage: === NOT REJECTED - Status: $statusText ===');
+        }
         
         print('🔍 Processed booking:'); // Debug logging
         print('  - Facility: $facilityName'); 
@@ -96,7 +120,6 @@ class MyBookingsPage extends StatelessWidget {
 
         // Determine status color
         Color statusColor;
-        String statusText = (booking['status'] as String? ?? 'pending').toUpperCase();
         switch (statusText) {
           case 'APPROVED':
             statusColor = Colors.green.shade400;
@@ -215,40 +238,47 @@ class MyBookingsPage extends StatelessWidget {
                 // Purpose if available - show official override message for rejected bookings
                 if (statusText == 'REJECTED') ...[
                   const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.red.shade50,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.red.shade200),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
+                  Builder(
+                    builder: (context) {
+                      print('🔍🔥🔥 MyBookingsPage: Builder called for booking ID ${booking['id']}');
+                      print('🔍🔥🔥 MyBookingsPage: Rejection reason: "${booking['rejection_reason']}"');
+                      print('🔍🔥🔥 MyBookingsPage: Rejection reason type: ${booking['rejection_reason'].runtimeType}');
+                      return Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.red.shade200),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Icon(Icons.warning, size: 16, color: Colors.red.shade600),
-                            const SizedBox(width: 6),
+                            Row(
+                              children: [
+                                Icon(Icons.warning, size: 16, color: Colors.red.shade600),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Booking Rejected',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.red.shade700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
                             Text(
-                              'Booking Rejected',
+                              booking['rejection_reason'] ?? 'This date has been booked by Officials, refund of your payments will be done shortly, check your email or SMS for further details.',
                               style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.red.shade700,
+                                fontSize: 12,
+                                color: Colors.red.shade600,
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          booking['rejection_reason'] ?? 'This date has been booked by the Officials, refund of your payments will be done shortly, check your email or SMS for further details.',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.red.shade600,
-                          ),
-                        ),
-                      ],
-                    ),
+                      );
+                    },
                   ),
                 ] else if (booking['purpose'] != null && booking['purpose'].toString().isNotEmpty) ...[
                   const SizedBox(height: 8),

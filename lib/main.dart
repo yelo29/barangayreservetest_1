@@ -10,10 +10,10 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   try {
-    // Using hardcoded ngrok URL - no need to load config
-    DebugLogger.ui('Using hardcoded global server URL');
+    // Using computer IP from server log
+    DebugLogger.ui('Using computer IP for development');
     DebugLogger.ui('Server URL: ${AppConfig.baseUrl}');
-    DebugLogger.ui('Global server ready for barangay operations');
+    DebugLogger.ui('Computer IP server ready for barangay operations');
     
     // Initialize user session
     await AuthApiService().initializeUser();

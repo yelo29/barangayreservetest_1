@@ -9,11 +9,16 @@ import json
 def test_verification_api():
     try:
         # Test the GET endpoint for verification requests
-        url = "https://intershifting-nakisha-nonspaciously.ngrok-free.dev/api/verification-requests"
+        url = "http://192.168.100.4:8000/api/verification-requests"
         
         print(f"🔍 Testing GET {url}")
         
-        response = requests.get(url)
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer 0b1b3562-dabb-4c7d-a34c-75a0710bc76a"
+        }
+        
+        response = requests.get(url, headers=headers)
         
         print(f"📊 Response status: {response.status_code}")
         print(f"📊 Response headers: {dict(response.headers)}")
@@ -28,6 +33,7 @@ def test_verification_api():
             if data.get('data'):
                 print(f"   - First item type: {type(data['data'][0])}")
                 print(f"   - First item keys: {list(data['data'][0].keys()) if isinstance(data['data'][0], dict) else 'Not a dict'}")
+                print(f"   - First item: {data['data'][0]}")
                 
         else:
             print(f"❌ Error response: {response.text}")

@@ -1,16 +1,14 @@
 import 'dart:convert';
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
+import '../services/api_service.dart' as api_service;
 import '../services/data_service.dart';
-import '../services/api_service_updated.dart' as api_service;
-import '../services/auth_api_service.dart';
-import '../services/base64_image_service.dart';
-import '../widgets/loading_widget.dart';
 import '../utils/debug_logger.dart';
+import '../services/auth_api_service.dart';
+import '../widgets/loading_widget.dart';
 import '../config/app_config.dart';
 
 class OfficialBookingFormScreen extends StatefulWidget {
@@ -31,7 +29,6 @@ class OfficialBookingFormScreen extends StatefulWidget {
 
 class _OfficialBookingFormScreenState extends State<OfficialBookingFormScreen> {
   final _formKey = GlobalKey<FormState>();
-  AuthApiService _authApiService = AuthApiService();
   
   bool _isLoadingTimeSlots = true;
   bool _isSubmitting = false;
@@ -89,7 +86,6 @@ class _OfficialBookingFormScreenState extends State<OfficialBookingFormScreen> {
         '4:00 PM - 6:00 PM',
         '6:00 PM - 8:00 PM',
         '8:00 PM - 10:00 PM',
-        '10:00 PM - 12:00 AM',
       ];
       
       // Fetch availability using same endpoint as resident form
@@ -101,12 +97,15 @@ class _OfficialBookingFormScreenState extends State<OfficialBookingFormScreen> {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success']) {
-          final availableSlots = List<String>.from(data['available_timeslots'] ?? []);
+          final defaultTimeSlots = List<String>.from(data['default_timeslots'] ?? []);
           final competitiveSlots = List<String>.from(data['competitive_timeslots'] ?? []);
           final approvedSlots = List<String>.from(data['approved_timeslots'] ?? []);
           
           // Convert to enhanced time slot format with resident booking info
           _allTimeSlots = defaultTimeSlots.map((timeSlot) {
+            DebugLogger.ui('🔍 Time slot matching - Processing time slot: "$timeSlot"');
+            DebugLogger.ui('🔍 Time slot matching - Resident bookings to check: ${_residentBookings.length}');
+            
             // Collect ALL matching resident bookings for this time slot
             final matchingResidentBookings = _residentBookings.where((booking) {
               String bookingTime = booking['time_slot'] ?? booking['timeslot'] ?? '';
@@ -132,6 +131,8 @@ class _OfficialBookingFormScreenState extends State<OfficialBookingFormScreen> {
               
               if (matches) {
                 DebugLogger.ui('🔍 Time slot MATCH: "$timeSlot" matches booking "$bookingTime"');
+              } else {
+                DebugLogger.ui('🔍 Time slot NO MATCH: "$timeSlot" vs booking "$bookingTime"');
               }
               
               return matches;
@@ -139,8 +140,17 @@ class _OfficialBookingFormScreenState extends State<OfficialBookingFormScreen> {
             
             final hasResidentBooking = matchingResidentBookings.isNotEmpty;
             
+            DebugLogger.ui('🔍 Time slot matching - Found ${matchingResidentBookings.length} matching bookings for "$timeSlot"');
+            if (matchingResidentBookings.isNotEmpty) {
+              for (int i = 0; i < matchingResidentBookings.length; i++) {
+                DebugLogger.ui('🔍 Time slot matching - Match $i: ${matchingResidentBookings[i]['start_time']} (${matchingResidentBookings[i]['status']})');
+              }
+            }
+            
             // For display, we'll show the first booking, but store all for the dialog
             final residentBooking = hasResidentBooking ? matchingResidentBookings.first : <String, dynamic>{};
+            
+            DebugLogger.ui('🔍 Time slot "$timeSlot" - has_resident_booking: $hasResidentBooking, status: ${hasResidentBooking ? (residentBooking['status'] == 'approved' ? 'approved' : 'pending') : 'available'}, background: ${hasResidentBooking ? (residentBooking['status'] == 'approved' ? 'Colors.green.shade100' : 'Colors.yellow.shade100') : 'Colors.grey.shade100'}');
             
             return {
               'id': defaultTimeSlots.indexOf(timeSlot),
@@ -166,6 +176,12 @@ class _OfficialBookingFormScreenState extends State<OfficialBookingFormScreen> {
       }
       
       DebugLogger.ui('Loaded ${_allTimeSlots.length} time slots for official booking');
+      
+      // Debug: Print final time slot states
+      for (int i = 0; i < _allTimeSlots.length && i < 3; i++) {
+        final slot = _allTimeSlots[i];
+        DebugLogger.ui('🔍 Final time slot $i: "${slot['time_slot']}" - available: ${slot['is_available']}, has_resident_booking: ${slot['has_resident_booking']}, status: ${slot['status']}');
+      }
     } catch (e) {
       DebugLogger.error('Error loading time slots: $e');
       // Create default time slots even on error
@@ -178,13 +194,14 @@ class _OfficialBookingFormScreenState extends State<OfficialBookingFormScreen> {
         {'id': 5, 'time_slot': '4:00 PM - 6:00 PM', 'is_available': true, 'has_resident_booking': false, 'resident_booking': {}, 'status': 'available', 'background_color': Colors.grey.shade100, 'border_color': Colors.grey.shade300, 'text_color': Colors.black87},
         {'id': 6, 'time_slot': '6:00 PM - 8:00 PM', 'is_available': true, 'has_resident_booking': false, 'resident_booking': {}, 'status': 'available', 'background_color': Colors.grey.shade100, 'border_color': Colors.grey.shade300, 'text_color': Colors.black87},
         {'id': 7, 'time_slot': '8:00 PM - 10:00 PM', 'is_available': true, 'has_resident_booking': false, 'resident_booking': {}, 'status': 'available', 'background_color': Colors.grey.shade100, 'border_color': Colors.grey.shade300, 'text_color': Colors.black87},
-        {'id': 8, 'time_slot': '10:00 PM - 12:00 PM', 'is_available': true, 'has_resident_booking': false, 'resident_booking': {}, 'status': 'available', 'background_color': Colors.grey.shade100, 'border_color': Colors.grey.shade300, 'text_color': Colors.black87},
       ];
     }
   }
 
   Future<void> _loadResidentBookings() async {
     try {
+      DebugLogger.ui('🔍 _loadResidentBookings() called');
+      
       // Get ALL bookings first (like official home tab does), then filter client-side
       final bookingsData = await DataService.fetchBookings(
         excludeUserRole: true, // Completely exclude user_role parameter
@@ -211,8 +228,9 @@ class _OfficialBookingFormScreenState extends State<OfficialBookingFormScreen> {
         final targetFacilityId = widget.facility['id'].toString();
         
         DebugLogger.ui('🔍 Filtering for facility: $targetFacilityId, date: $targetDate');
+        DebugLogger.ui('🔍 Total bookings received: ${bookingsList.length}');
         
-        // First, let's see ALL bookings for the target date (any facility)
+        // First, let's see ALL bookings for target date (any facility)
         final allBookingsForDate = List<Map<String, dynamic>>.from(bookingsList)
             .where((booking) => booking['booking_date']?.toString() == targetDate)
             .toList();
@@ -223,16 +241,84 @@ class _OfficialBookingFormScreenState extends State<OfficialBookingFormScreen> {
           DebugLogger.ui('🔍 Date booking $i: ${booking['start_time']} - ${booking['status']} - ${booking['user_email']} - Facility: ${booking['facility_id']} - Role: ${booking['user_role']}');
         }
         
-        // Now filter for our specific facility and handle the user_role issue
-        _residentBookings = List<Map<String, dynamic>>.from(bookingsList)
-            .where((booking) => 
-                booking['booking_date']?.toString() == targetDate &&
-                booking['facility_id'].toString() == targetFacilityId &&
-                (booking['status'] == 'pending' || booking['status'] == 'approved') &&
-                // Handle user_role being null or 'resident'
-                (booking['user_role'] == 'resident' || booking['user_role'] == null || booking['user_role'].toString() == '')
-            )
+        // Now filter for our specific facility and handle the user_role issue properly
+        DebugLogger.ui('🔍 DEBUG: Before filtering - bookingsList length: ${bookingsList.length}');
+        
+        // Debug each booking individually to see what's happening
+        for (int i = 0; i < bookingsList.length && i < 5; i++) {
+          final booking = bookingsList[i];
+          final dateMatch = booking['booking_date']?.toString() == targetDate;
+          final facilityMatch = booking['facility_id'].toString() == targetFacilityId;
+          final statusMatch = (booking['status'] == 'pending' || booking['status'] == 'approved');
+          final role = booking['user_role'];
+          
+          // Debug role matching in detail
+          final isResidentString = booking['user_role'] == 'resident';
+          final isNull = booking['user_role'] == null;
+          final isZeroString = booking['user_role'] == '0';
+          final isZeroNum = booking['user_role'] == 0;
+          final startsWithZero = booking['user_role'].toString().startsWith('0.');
+          final is005 = booking['user_role'] == '0.05';
+          final is01 = booking['user_role'] == '0.1';
+          
+          final roleMatch = isResidentString || isNull || isZeroString || isZeroNum || startsWithZero || is005 || is01 || 
+                       booking['user_role'] == 0.05 || booking['user_role'] == 0.1;  // Handle double values
+          final shouldInclude = dateMatch && facilityMatch && statusMatch && roleMatch;
+          
+          DebugLogger.ui('🔍 DEBUG: Individual booking $i - Date: $dateMatch, Facility: $facilityMatch, Status: $statusMatch, Role: $role (type: ${role.runtimeType}) -> $roleMatch, Should Include: $shouldInclude');
+        }
+        
+        // Debug: Print first booking to see available fields
+            if (bookingsList.isNotEmpty) {
+              DebugLogger.ui('🔍 DEBUG: First booking fields: ${bookingsList[0].keys.toList()}');
+              DebugLogger.ui('🔍 DEBUG: First booking full_name: ${bookingsList[0]['full_name']}');
+              DebugLogger.ui('🔍 DEBUG: First booking user_name: ${bookingsList[0]['user_name']}');
+            }
+            
+            _residentBookings = List<Map<String, dynamic>>.from(bookingsList)
+            .where((booking) {
+                // Enhanced date comparison - handle both string and DateTime
+                final bookingDate = booking['booking_date'];
+                bool dateMatch = false;
+                
+                DebugLogger.ui('🔍 DEBUG: Date comparison - booking_date: $bookingDate (type: ${bookingDate.runtimeType}) vs targetDate: $targetDate');
+                
+                if (bookingDate is String) {
+                  dateMatch = bookingDate == targetDate;
+                  DebugLogger.ui('🔍 DEBUG: String date comparison: "$bookingDate" == "$targetDate" -> $dateMatch');
+                } else if (bookingDate is DateTime) {
+                  final bookingDateString = bookingDate.toString().split(' ')[0]; // Get YYYY-MM-DD part
+                  dateMatch = bookingDateString == targetDate;
+                  DebugLogger.ui('🔍 DEBUG: DateTime date comparison: "$bookingDateString" == "$targetDate" -> $dateMatch');
+                } else {
+                  DebugLogger.ui('🔍 DEBUG: Unknown date type: ${bookingDate.runtimeType}');
+                }
+                
+                final facilityMatch = booking['facility_id'].toString() == targetFacilityId;
+                // For officials, show ALL resident bookings regardless of status
+                final statusMatch = true; // Don't filter by status for officials
+                final userRole = booking['user_role'];
+                DebugLogger.ui('🔍 DEBUG: Role check - user_role: $userRole (type: ${userRole.runtimeType})');
+                
+                final roleMatch = (userRole == 'resident' || 
+                                 userRole == null || 
+                                 userRole == '0' ||
+                                 userRole == 0 ||  // Handle integer 0
+                                 userRole.toString().startsWith('0.') ||
+                                 userRole == 0.05 ||  // Handle double 0.05
+                                 userRole == '0.05' ||
+                                 userRole == 0.1 ||   // Handle double 0.1
+                                 userRole == '0.1');
+                
+                DebugLogger.ui('🔍 DEBUG: Role details - == "resident": ${userRole == 'resident'}, == null: ${userRole == null}, == "0": ${userRole == '0'}, == 0 (int): ${userRole == 0}, toString().startsWith("0."): ${userRole.toString().startsWith('0.')}, == "0.05": ${userRole == '0.05'}, == 0.05 (double): ${userRole == 0.05}, == "0.1": ${userRole == '0.1'}, == 0.1 (double): ${userRole == 0.1}');
+                
+                DebugLogger.ui('🔍 DEBUG: Filtering - Date: $dateMatch, Facility: $facilityMatch, Status: $statusMatch, Role: $roleMatch');
+                
+                return dateMatch && facilityMatch && statusMatch && roleMatch;
+            })
             .toList();
+        
+        DebugLogger.ui('🔍 DEBUG: After filtering - _residentBookings length: ${_residentBookings.length}');
         
         DebugLogger.ui('🔍 Loaded ${_residentBookings.length} resident bookings for official view');
         
@@ -240,6 +326,40 @@ class _OfficialBookingFormScreenState extends State<OfficialBookingFormScreen> {
         for (int i = 0; i < _residentBookings.length && i < 3; i++) {
           final booking = _residentBookings[i];
           DebugLogger.ui('🔍 Filtered booking $i: ${booking['start_time']} - ${booking['status']} - ${booking['user_email']} - Facility: ${booking['facility_id']} - Date: ${booking['booking_date']} - Role: ${booking['user_role']}');
+        }
+        
+        // Debug: Check if any bookings are being filtered out incorrectly
+        final facilityDateBookings = bookingsList.where((booking) => 
+            booking['booking_date']?.toString() == targetDate &&
+            booking['facility_id'].toString() == targetFacilityId
+        ).toList();
+        
+        DebugLogger.ui('🔍 DEBUG: All bookings for this facility/date: ${facilityDateBookings.length}');
+        for (int i = 0; i < facilityDateBookings.length; i++) {
+          final booking = facilityDateBookings[i];
+          final status = booking['status'];
+          final role = booking['user_role'];
+          final statusMatch = (status == 'pending' || status == 'approved');
+          
+          // Debug role matching in detail
+          final isResidentString = booking['user_role'] == 'resident';
+          final isNull = booking['user_role'] == null;
+          final isZeroString = booking['user_role'] == '0';
+          final isZeroNum = booking['user_role'] == 0;
+          final startsWithZero = booking['user_role'].toString().startsWith('0.');
+          final is005 = booking['user_role'] == '0.05';
+          final is01 = booking['user_role'] == '0.1';
+          
+          final roleMatch = isResidentString || isNull || isZeroString || isZeroNum || startsWithZero || is005 || is01 || 
+                       booking['user_role'] == 0.05 || booking['user_role'] == 0.1;  // Handle double values
+          
+          DebugLogger.ui('🔍 DEBUG: Role matching details - role: $role (type: ${role.runtimeType})');
+          DebugLogger.ui('🔍 DEBUG: isResidentString: $isResidentString, isNull: $isNull, isZeroString: $isZeroString, isZeroNum: $isZeroNum');
+          DebugLogger.ui('🔍 DEBUG: startsWithZero: $startsWithZero, is005: $is005, is01: $is01');
+          DebugLogger.ui('🔍 DEBUG: Final roleMatch: $roleMatch');
+          
+          DebugLogger.ui('🔍 DEBUG: Booking $i - Status: $status (match: $statusMatch), Role: $role (match: $roleMatch), Final: ${statusMatch && roleMatch}');
+          DebugLogger.ui('🔍 DEBUG: Full booking data: $booking');
         }
         
         // Also print some sample bookings that didn't match for debugging
@@ -312,7 +432,7 @@ class _OfficialBookingFormScreenState extends State<OfficialBookingFormScreen> {
                         ),
                       ),
                     ],
-                    _buildDetailRow('Name', residentBooking['full_name'] ?? 'N/A'),
+                    _buildDetailRow('Name', residentBooking['full_name'] ?? residentBooking['user_name'] ?? 'N/A'),
                     _buildDetailRow('Email', residentBooking['user_email'] ?? 'N/A'),
                     _buildDetailRow('Contact', residentBooking['contact_number'] ?? 'N/A'),
                     _buildDetailRow('Address', residentBooking['contact_address'] ?? 'N/A'),
@@ -417,7 +537,7 @@ class _OfficialBookingFormScreenState extends State<OfficialBookingFormScreen> {
   }
 
   Future<void> _submitBooking() async {
-    // Officials don't need to select a time slot - they can book the entire day
+    // Officials can book entire day - no time slot selection needed
     setState(() => _isSubmitting = true);
 
     try {
@@ -425,9 +545,8 @@ class _OfficialBookingFormScreenState extends State<OfficialBookingFormScreen> {
         'facility_id': widget.facility['id'],
         'user_email': _officialUserData['user_email'] ?? 'captain@barangay.gov',
         'date': DateFormat('yyyy-MM-dd').format(widget.selectedDate),
-        'timeslot': 'ALL DAY', // Officials book the entire day
+        'timeslot': 'ALL DAY', // Officials book entire day
         'total_amount': 0, // Official bookings are free
-        'status': 'approved', // Official bookings are auto-approved
         'full_name': _officialUserData['full_name'] ?? 'Barangay Official',
         'contact_number': _officialUserData['contact_number'] ?? '09123456789',
         'address': 'Barangay Hall',
@@ -437,23 +556,40 @@ class _OfficialBookingFormScreenState extends State<OfficialBookingFormScreen> {
 
       DebugLogger.ui('Official booking data: $bookingData');
 
-      // First, reject all overlapping resident bookings
-      await _rejectOverlappingResidentBookings();
-
-      // Then create the official booking
+      // Create the official booking (backend will auto-reject ALL resident bookings for this date)
       final response = await api_service.ApiService.createBooking(bookingData);
 
       if (response['success'] == true) {
-        _showSuccessSnackBar('Official booking created successfully! Overlapping resident bookings have been rejected.');
-        if (mounted) {
-          Navigator.of(context).pop();
+        // Check if any resident bookings were auto-rejected
+        final rejectedBookings = response['rejected_resident_bookings'] as List<dynamic>? ?? [];
+        
+        String message = response['message'] ?? 'Official booking created successfully!';
+        
+        if (rejectedBookings.isNotEmpty) {
+          // Show detailed success message with ALL rejected bookings info
+          DebugLogger.ui('🎯 Showing success dialog with ${rejectedBookings.length} rejected bookings');
+          await _showDetailedSuccessDialog(message, rejectedBookings.cast<Map<String, dynamic>>());
+          DebugLogger.ui('🎯 Dialog closed - navigating back');
+          // Navigate after dialog is closed
+          if (mounted) {
+            DebugLogger.ui('🎯 Navigating back from official booking form');
+            Navigator.of(context).pop();
+          }
+        } else {
+          DebugLogger.ui('🎯 Showing simple success snackbar');
+          _showSuccessSnackBar(message);
+          // Navigate immediately for simple success
+          if (mounted) {
+            DebugLogger.ui('🎯 Navigating back from official booking form (simple)');
+            Navigator.of(context).pop();
+          }
         }
       } else {
         _showErrorSnackBar(response['message'] ?? 'Failed to create booking');
       }
     } catch (e) {
       DebugLogger.error('Error submitting official booking: $e');
-      _showErrorSnackBar('An error occurred while creating the booking');
+      _showErrorSnackBar('An error occurred while creating booking');
     } finally {
       setState(() => _isSubmitting = false);
     }
@@ -505,7 +641,16 @@ class _OfficialBookingFormScreenState extends State<OfficialBookingFormScreen> {
             
             final residentBookings = List<Map<String, dynamic>>.from(bookingsList)
                 .where((booking) => 
-                    booking['user_role'] == 'resident' && 
+                    // Handle user_role being null, 'resident', or numeric values (0, 0.05, 0.1, etc from database)
+                    (booking['user_role'] == 'resident' || 
+                     booking['user_role'] == null || 
+                     booking['user_role'] == '0' ||
+                     booking['user_role'] == 0 ||  // Handle integer 0
+                     booking['user_role'].toString().startsWith('0.') ||
+                     booking['user_role'] == '0.05' ||
+                     booking['user_role'] == 0.05 ||  // Handle double 0.05
+                     booking['user_role'] == '0.1' ||
+                     booking['user_role'] == 0.1) &&  // Handle double 0.1
                     (booking['status'] == 'pending' || booking['status'] == 'approved') &&
                     booking['facility_id'].toString() == targetFacilityId &&
                     booking['booking_date']?.toString() == targetDate
@@ -608,6 +753,109 @@ class _OfficialBookingFormScreenState extends State<OfficialBookingFormScreen> {
     return false;
   }
 
+  Future<void> _showDetailedSuccessDialog(String message, List<Map<String, dynamic>> rejectedBookings) async {
+    return showDialog<void>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.green, size: 24),
+              const SizedBox(width: 8),
+              Expanded(
+                child: const Text(
+                  'Booking Successful!',
+                  style: TextStyle(fontSize: 16),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    message,
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Auto-rejected Resident Bookings:',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  const SizedBox(height: 8),
+                  ...rejectedBookings.asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final booking = entry.value;
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.red.shade200),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${index + 1}. ${booking['resident_name']}',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            'Email: ${booking['resident_email']}',
+                            style: const TextStyle(fontSize: 11),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            'Time: ${booking['timeslot']}',
+                            style: const TextStyle(fontSize: 11),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const Text(
+                            'Status: Rejected with apology',
+                            style: TextStyle(
+                              color: Colors.red,
+                              fontWeight: FontWeight.w500,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Note: Residents will receive an apology message and refund notification.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                DebugLogger.ui('🎯 Dialog OK button pressed - closing dialog');
+                Navigator.of(context).pop(); // Just close the dialog
+              },
+              child: const Text('OK'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   void _showErrorSnackBar(String message) {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -656,7 +904,7 @@ class _OfficialBookingFormScreenState extends State<OfficialBookingFormScreen> {
             children: [
               Icon(
                 Icons.business,
-                color: Colors.blue.shade800,
+                color: Colors.red.shade800,
                 size: 24,
               ),
               const SizedBox(width: 12),
@@ -713,7 +961,7 @@ class _OfficialBookingFormScreenState extends State<OfficialBookingFormScreen> {
             children: [
               Icon(
                 Icons.calendar_today,
-                color: Colors.blue.shade800,
+                color: Colors.red.shade800,
                 size: 24,
               ),
               const SizedBox(width: 12),
@@ -756,18 +1004,29 @@ class _OfficialBookingFormScreenState extends State<OfficialBookingFormScreen> {
             children: [
               Icon(
                 Icons.access_time,
-                color: Colors.blue.shade800,
+                color: Colors.red.shade800,
                 size: 24,
               ),
               const SizedBox(width: 12),
-              const Text(
-                'Resident Bookings',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
+              Expanded(
+                child: const Text(
+                  'Resident Bookings for This Date',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Review resident bookings for this date. Your official booking will automatically reject all resident bookings.',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey.shade600,
+            ),
           ),
           const SizedBox(height: 16),
           GridView.builder(
@@ -785,7 +1044,12 @@ class _OfficialBookingFormScreenState extends State<OfficialBookingFormScreen> {
               final hasResidentBooking = timeSlot['has_resident_booking'] == true;
               
               return InkWell(
-                onTap: hasResidentBooking ? () => _showResidentBookingDetails(timeSlot) : null,
+                onTap: () {
+                  // Only show resident booking details - no selection needed for officials
+                  if (hasResidentBooking) {
+                    _showResidentBookingDetails(timeSlot);
+                  }
+                },
                 borderRadius: BorderRadius.circular(8),
                 child: Container(
                   padding: const EdgeInsets.all(8), // Reduced padding
@@ -816,15 +1080,20 @@ class _OfficialBookingFormScreenState extends State<OfficialBookingFormScreen> {
                               color: timeSlot['border_color'].withOpacity(0.2),
                               borderRadius: BorderRadius.circular(4),
                             ),
-                            child: Text(
-                              timeSlot['resident_count'] > 1 
-                                  ? '${timeSlot['resident_count']} ${timeSlot['resident_booking']['status'] == 'approved' ? 'Approved' : 'Pending'}'
-                                  : (timeSlot['resident_booking']['status'] == 'approved' ? 'Approved' : 'Pending'),
-                              style: TextStyle(
-                                fontSize: 8, // Reduced font size
-                                color: timeSlot['border_color'],
-                                fontWeight: FontWeight.bold,
-                              ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  timeSlot['resident_count'] > 1 
+                                      ? '${timeSlot['resident_count']} ${timeSlot['resident_booking']['status'] == 'approved' ? 'Approved' : 'Pending'}'
+                                      : (timeSlot['resident_booking']['status'] == 'approved' ? 'Approved' : 'Pending'),
+                                  style: TextStyle(
+                                    fontSize: 8, // Reduced font size
+                                    color: timeSlot['border_color'],
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
@@ -846,7 +1115,7 @@ class _OfficialBookingFormScreenState extends State<OfficialBookingFormScreen> {
       child: ElevatedButton(
         onPressed: _isSubmitting ? null : _submitBooking,
         style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.blue.shade800,
+          backgroundColor: Colors.red.shade800,
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(vertical: 16),
           shape: RoundedRectangleBorder(
@@ -866,13 +1135,10 @@ class _OfficialBookingFormScreenState extends State<OfficialBookingFormScreen> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Text('Submitting...'),
+                  Text('Creating Booking...'),
                 ],
               )
-            : const Text(
-                'Confirm Official Booking',
-                style: TextStyle(fontSize: 16),
-              ),
+            : const Text('Book Entire Day'),
       ),
     );
   }
@@ -882,7 +1148,7 @@ class _OfficialBookingFormScreenState extends State<OfficialBookingFormScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text('Official Booking - ${widget.facility['name']}'),
-        backgroundColor: Colors.blue.shade800,
+        backgroundColor: Colors.red.shade800,
         foregroundColor: Colors.white,
       ),
       body: _isLoadingTimeSlots

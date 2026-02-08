@@ -22,14 +22,35 @@ class _ResidentBookingsTabState extends State<ResidentBookingsTab> {
     super.initState();
     _loadMyBookings();
   }
+  
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Refresh bookings when the tab becomes visible again
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _loadMyBookings();
+      }
+    });
+  }
 
   Future<void> _loadMyBookings() async {
     try {
       DebugLogger.ui('Loading my bookings for resident...');
       print('🔍 _loadMyBookings() called'); // Debug logging
       
-      // Use DataService for consistent data fetching
-      final bookingsResponse = await DataService.fetchBookings();
+      // Get current user data
+      final userData = await DataService.getCurrentUserData();
+      if (userData == null) {
+        throw Exception('User not logged in');
+      }
+      
+      print('🔍 Current user data: $userData'); // Debug logging
+      
+      // Use DataService with explicit user role and email for residents
+      final bookingsResponse = await DataService.fetchBookings(
+        userRole: 'resident',
+      );
       
       if (bookingsResponse['success'] == true) {
         final List<Map<String, dynamic>> bookings = bookingsResponse['data'] ?? [];
@@ -37,10 +58,18 @@ class _ResidentBookingsTabState extends State<ResidentBookingsTab> {
         
         // Filter bookings for current user (DataService already filters by user email for residents)
         final myBookings = bookings.where((booking) => 
-          booking['user_email'] != null
+          booking['user_email'] != null && booking['user_email'] == userData['email']
         ).toList();
         
         print('🔍 Filtered to ${myBookings.length} bookings for current user'); // Debug logging
+        
+        // Debug: Print first few bookings to check structure
+        if (myBookings.isNotEmpty) {
+          print('🔍 DEBUG: First booking structure:');
+          print('  Keys: ${myBookings.first.keys.toList()}');
+          print('  Status: ${myBookings.first['status']}');
+          print('  Rejection reason: ${myBookings.first['rejection_reason']}');
+        }
         
         setState(() {
           _myBookings = myBookings;

@@ -132,7 +132,8 @@ class DataService {
       
       // Use provided userRole or default to current user's role
       if (excludeUserRole == true) {
-        // Completely exclude user_role parameter
+        // Completely exclude user_role parameter and add excludeUserRole flag
+        queryParams['excludeUserRole'] = 'true';
       } else if (userRole != null) {
         if (userRole.isNotEmpty) {
           queryParams['user_role'] = userRole;
@@ -150,6 +151,9 @@ class DataService {
       String queryString = queryParams.entries
           .map((e) => '${e.key}=${Uri.encodeComponent(e.value)}')
           .join('&');
+      
+      print('🔍 DataService.fetchBookings queryParams: $queryParams');
+      print('🔍 DataService.fetchBookings queryString: $queryString');
       
       String url = '${AppConfig.baseUrl}/api/bookings';
       if (queryString.isNotEmpty) {

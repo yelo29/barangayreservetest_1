@@ -136,6 +136,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
               _buildDetailRow('Facility', widget.booking['facility_name'] ?? widget.booking['facilityName'] ?? 'N/A'),
               _buildDetailRow('Date', widget.booking['booking_date'] ?? widget.booking['date'] ?? 'N/A'),
               _buildDetailRow('Time Slot', widget.booking['start_time'] ?? widget.booking['timeslot'] ?? widget.booking['time_slot'] ?? 'N/A'),
+              _buildDetailRow('Purpose', _getSafeString(widget.booking['purpose'])),
               _buildDetailRow('Submitted Date', _formatDate(widget.booking['created_at'])),
             ]),
             
@@ -381,13 +382,18 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
   }
 
   Widget _buildBase64Image(String base64String) {
+    print('🔍 DEBUG: _buildBase64Image called with: ${base64String.substring(0, base64String.length > 100 ? 100 : base64String.length)}...');
+    
     // Extract pure base64 string from data URL format
     final String? pureBase64 = Base64ImageService.extractBase64(base64String);
     if (pureBase64 == null) {
+      print('❌ DEBUG: Failed to extract base64 from: ${base64String.substring(0, base64String.length > 50 ? 50 : base64String.length)}...');
       return const Center(
         child: Text('Invalid image format'),
       );
     }
+    
+    print('✅ DEBUG: Successfully extracted base64: ${pureBase64.length} characters');
     
     return GestureDetector(
       onTap: () {
@@ -395,9 +401,12 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
         Uint8List bytes;
         try {
           bytes = base64Decode(pureBase64);
+          print('✅ DEBUG: Successfully decoded base64 to ${bytes.length} bytes');
         } catch (e) {
+          print('❌ DEBUG: Failed to decode base64: $e');
           return;
         }
+        
         Navigator.push(context, MaterialPageRoute(builder: (_) {
           return Scaffold(
             appBar: AppBar(backgroundColor: Colors.black),

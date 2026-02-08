@@ -24,7 +24,9 @@ class _OfficialHomeTabState extends State<OfficialHomeTab> {
   List<Map<String, dynamic>> _facilities = [];
   Map<String, List<Map<String, dynamic>>> _pendingBookings = {};
   Map<String, List<Map<String, dynamic>>> _approvedBookings = {};
+  Map<String, List<Map<String, dynamic>>> _officialBookings = {};
   bool _isLoading = true;
+  Map<String, dynamic>? _currentUser;
   final AuthApiService _authApiService = AuthApiService();
 
   @override
@@ -36,6 +38,9 @@ class _OfficialHomeTabState extends State<OfficialHomeTab> {
   Future<void> _loadFacilities() async {
     try {
       DebugLogger.ui('Loading official dashboard facilities...');
+
+      // Get current user data
+      _currentUser = await _authApiService.getCurrentUser();
 
       // Use DataService for consistent data fetching
       final facilitiesResponse = await DataService.fetchFacilities();
@@ -93,12 +98,34 @@ class _OfficialHomeTabState extends State<OfficialHomeTab> {
         final pendingBookings = allBookings.where((booking) => booking['status'] == 'pending').toList();
         final approvedBookings = allBookings.where((booking) => booking['status'] == 'approved').toList();
 
+        // Separate official bookings from resident approved bookings
+        final officialBookings = approvedBookings.where((booking) {
+          final String userEmail = booking['user_email']?.toString() ?? '';
+          final bool isOfficialEmail = userEmail.contains('official') || 
+                                   userEmail.contains('barangay') ||
+                                   userEmail.contains('admin');
+          final bool isOfficialFlag = booking['is_official_booking'] == true;
+          return isOfficialEmail || isOfficialFlag;
+        }).toList();
+
+        // Resident approved bookings (non-official)
+        final residentApprovedBookings = approvedBookings.where((booking) {
+          final String userEmail = booking['user_email']?.toString() ?? '';
+          final bool isOfficialEmail = userEmail.contains('official') || 
+                                   userEmail.contains('barangay') ||
+                                   userEmail.contains('admin');
+          final bool isOfficialFlag = booking['is_official_booking'] == true;
+          return !(isOfficialEmail || isOfficialFlag);
+        }).toList();
+
         print('🔍 OfficialHomeTab - pending bookings total: ${pendingBookings.length}');
-        print('🔍 OfficialHomeTab - approved bookings total: ${approvedBookings.length}');
+        print('🔍 OfficialHomeTab - resident approved bookings total: ${residentApprovedBookings.length}');
+        print('🔍 OfficialHomeTab - official bookings total: ${officialBookings.length}');
 
         // Group bookings by date (for all facilities since officials see all)
         Map<String, List<Map<String, dynamic>>> pending = {};
         Map<String, List<Map<String, dynamic>>> approved = {};
+        Map<String, List<Map<String, dynamic>>> official = {};
 
         for (var booking in pendingBookings) {
           final date = booking['booking_date']?.toString() ?? '';
@@ -108,7 +135,7 @@ class _OfficialHomeTabState extends State<OfficialHomeTab> {
           }
         }
 
-        for (var booking in approvedBookings) {
+        for (var booking in residentApprovedBookings) {
           final date = booking['booking_date']?.toString() ?? '';
           if (date.isNotEmpty) {
             approved.putIfAbsent(date, () => []);
@@ -116,10 +143,19 @@ class _OfficialHomeTabState extends State<OfficialHomeTab> {
           }
         }
 
+        for (var booking in officialBookings) {
+          final date = booking['booking_date']?.toString() ?? '';
+          if (date.isNotEmpty) {
+            official.putIfAbsent(date, () => []);
+            official[date]!.add(booking);
+          }
+        }
+
         if (mounted) {
           setState(() {
             _pendingBookings = pending;
             _approvedBookings = approved;
+            _officialBookings = official;
           });
         }
       } else {
@@ -131,6 +167,7 @@ class _OfficialHomeTabState extends State<OfficialHomeTab> {
         setState(() {
           _pendingBookings = {};
           _approvedBookings = {};
+          _officialBookings = {};
         });
       }
     }
@@ -143,6 +180,7 @@ class _OfficialHomeTabState extends State<OfficialHomeTab> {
     // Filter bookings for this specific facility
     final facilityPendingBookings = <String, List<Map<String, dynamic>>>{};
     final facilityApprovedBookings = <String, List<Map<String, dynamic>>>{};
+    final facilityOfficialBookings = <String, List<Map<String, dynamic>>>{};
 
     // Filter pending bookings for this facility
     _pendingBookings.forEach((date, bookings) {
@@ -155,7 +193,7 @@ class _OfficialHomeTabState extends State<OfficialHomeTab> {
       }
     });
 
-    // Filter approved bookings for this facility
+    // Filter approved bookings for this facility (resident only)
     _approvedBookings.forEach((date, bookings) {
       final facilityBookings = bookings.where((booking) => 
         booking['facility_id'] == facilityId
@@ -166,6 +204,17 @@ class _OfficialHomeTabState extends State<OfficialHomeTab> {
       }
     });
 
+    // Filter official bookings for this facility
+    _officialBookings.forEach((date, bookings) {
+      final facilityBookings = bookings.where((booking) => 
+        booking['facility_id'] == facilityId
+      ).toList();
+      
+      if (facilityBookings.isNotEmpty) {
+        facilityOfficialBookings[date] = facilityBookings;
+      }
+    });
+
     // Add pending bookings for this facility
     facilityPendingBookings.forEach((date, bookings) {
       final formattedDate = _formatDateForCalendar(date);
@@ -173,11 +222,21 @@ class _OfficialHomeTabState extends State<OfficialHomeTab> {
       print('🔍 Adding facility pending date: $date -> $formattedDate (Facility: ${facility['name']})');
     });
 
-    // Add approved bookings for this facility (overrides pending if exists)
+    // Add official bookings for this facility (highest priority - locks for everyone including officials)
+    facilityOfficialBookings.forEach((date, bookings) {
+      final formattedDate = _formatDateForCalendar(date);
+      statuses[formattedDate] = 'official_locked';
+      print('🔍 Adding facility OFFICIAL LOCKED date: $date -> $formattedDate (Facility: ${facility['name']})');
+    });
+
+    // Add resident approved bookings for this facility (lower priority than official)
     facilityApprovedBookings.forEach((date, bookings) {
       final formattedDate = _formatDateForCalendar(date);
-      statuses[formattedDate] = 'approved';
-      print('🔍 Adding facility approved date: $date -> $formattedDate (Facility: ${facility['name']})');
+      // Only add if not already locked by official booking
+      if (!statuses.containsKey(formattedDate)) {
+        statuses[formattedDate] = 'approved';
+        print('🔍 Adding facility resident approved date: $date -> $formattedDate (Facility: ${facility['name']})');
+      }
     });
 
     print('🔍 Facility ${facility['name']} booking statuses - total: ${statuses.length}');
@@ -233,6 +292,8 @@ class _OfficialHomeTabState extends State<OfficialHomeTab> {
             availableColor: Colors.grey.shade100,
             selectedColor: Colors.blue,
             showTodayButton: false,
+            currentUserEmail: _currentUser?['email'],
+            currentUserRole: _currentUser?['role'],
             onDateSelected: (date) {
               Navigator.pop(ctx, date);
             },
@@ -537,6 +598,28 @@ class _OfficialHomeTabState extends State<OfficialHomeTab> {
                                                                 ),
                                                               ),
                                                             ),
+                                                            const SizedBox(width: 4),
+                                                            Container(
+                                                              padding: const EdgeInsets.symmetric(
+                                                                horizontal: 8,
+                                                                vertical: 2,
+                                                              ),
+                                                              decoration: BoxDecoration(
+                                                                color: Colors.blue.shade100,
+                                                                borderRadius: BorderRadius.circular(6),
+                                                              ),
+                                                              child: GestureDetector(
+                                                                onTap: () => _regenerateTimeSlots(facility),
+                                                                child: const Text(
+                                                                  'Slots',
+                                                                  style: TextStyle(
+                                                                    color: Colors.blue,
+                                                                    fontSize: 10,
+                                                                    fontWeight: FontWeight.bold,
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                            ),
                                                             const SizedBox(width: 8),
                                                             Container(
                                                               padding: const EdgeInsets.symmetric(
@@ -670,8 +753,8 @@ class _OfficialHomeTabState extends State<OfficialHomeTab> {
       );
 
       try {
-        // Use DataService for consistent facility management
-        final result = await DataService.fetchFacilities();
+        // Use DataService.deleteFacility to actually delete the facility
+        final result = await api_service.ApiService.deleteFacility(facility['id'].toString());
         
         // Close loading dialog
         Navigator.pop(context);
@@ -683,20 +766,21 @@ class _OfficialHomeTabState extends State<OfficialHomeTab> {
             title: Text(result['success'] ? 'Success' : 'Error'),
             content: Text(result['success'] 
                 ? 'Facility deleted successfully!' 
-                : result['error'] ?? 'Failed to delete facility'),
+                : result['message'] ?? 'Failed to delete facility'),
             actions: [
               TextButton(
-                onPressed: () => Navigator.pop(context),
+                onPressed: () {
+                  Navigator.pop(context);
+                  // Refresh facilities after successful deletion
+                  if (result['success']) {
+                    _loadFacilities();
+                  }
+                },
                 child: const Text('OK'),
               ),
             ],
           ),
         );
-        
-        // Refresh facilities list if successful
-        if (result['success']) {
-          _loadFacilities();
-        }
       } catch (e) {
         // Close loading dialog
         Navigator.pop(context);
@@ -707,6 +791,88 @@ class _OfficialHomeTabState extends State<OfficialHomeTab> {
           builder: (context) => AlertDialog(
             title: const Text('Error'),
             content: Text('Failed to delete facility: $e'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+    }
+  }
+
+  void _regenerateTimeSlots(Map<String, dynamic> facility) async {
+    // Show confirmation dialog
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Regenerate Time Slots'),
+        content: Text('Are you sure you want to regenerate time slots for "${facility['name']}"?\n\nThis will replace all existing time slots with new ones based on the facility type.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Regenerate'),
+            style: TextButton.styleFrom(foregroundColor: Colors.blue),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      // Show loading indicator
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 20),
+              Text('Regenerating time slots...'),
+            ],
+          ),
+        ),
+      );
+
+      try {
+        // Call API to regenerate time slots
+        final result = await api_service.ApiService.regenerateFacilityTimeSlots(facility['id'].toString());
+        
+        // Close loading dialog
+        Navigator.pop(context);
+        
+        // Show result
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text(result['success'] ? 'Success' : 'Error'),
+            content: Text(result['success'] 
+                ? 'Time slots regenerated successfully!\nCreated: ${result['time_slots_created']} slots' 
+                : result['message'] ?? 'Failed to regenerate time slots'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      } catch (e) {
+        // Close loading dialog
+        Navigator.pop(context);
+        
+        // Show error
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Error'),
+            content: Text('Failed to regenerate time slots: $e'),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),

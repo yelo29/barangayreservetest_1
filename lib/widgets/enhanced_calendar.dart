@@ -15,6 +15,8 @@ class EnhancedCalendar extends StatefulWidget {
   final bool showTodayButton;
   final DateTime? firstDate;
   final DateTime? lastDate;
+  final String? currentUserEmail;
+  final String? currentUserRole;
 
   const EnhancedCalendar({
     super.key,
@@ -31,6 +33,8 @@ class EnhancedCalendar extends StatefulWidget {
     this.showTodayButton = true,
     this.firstDate,
     this.lastDate,
+    this.currentUserEmail,
+    this.currentUserRole,
   });
 
   @override
@@ -87,17 +91,44 @@ class _EnhancedCalendarState extends State<EnhancedCalendar> {
       return widget.isDateEnabled!(date);
     }
     
-    // Check if this date is untappable (gray)
+    // 🔥 ROLE-SPECIFIC LOGIC: Different behavior for residents vs officials
     final String dateKey = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
     final String? status = widget.bookingStatuses?[dateKey];
     
     print('🔍 Calendar date check: $dateKey -> status: $status');
     
-    // Disable dates that are official quick bookings (gray, untappable for everyone)
+    // Disable dates with official bookings (gray - untappable for everyone)
     if (status == 'official_locked' || status == 'official_unavailable') {
-      print('🔍 Date $dateKey is LOCKED (official booking)');
-      return false;
+      print('🔍 Date $dateKey is LOCKED (official booking) - disabled for ALL users');
+      return false; // Official bookings lock calendar for everyone
     }
+    
+    // For resident approved bookings, check if this is handled at calendar level
+    // Note: If status is 'approved', it means OTHER resident's booking (current user's own bookings use 'own_approved')
+    if (status == 'approved') {
+      // Check if current user is an official
+      final bool isOfficial = widget.currentUserRole?.toString().toLowerCase() == 'official' ||
+                             widget.currentUserEmail?.toString().contains('official') == true ||
+                             widget.currentUserEmail?.toString().contains('barangay') == true ||
+                             widget.currentUserEmail?.toString().contains('admin') == true;
+      
+      if (isOfficial) {
+        print('🔍 DEBUG: Date $dateKey has resident approved booking - OFFICIAL can override (enabled)');
+        // Don't return false, continue to check past dates - officials can override resident bookings
+      } else {
+        print('🔍 DEBUG: Date $dateKey has OTHER resident approved booking - disabled');
+        return false; // Other resident approved bookings lock calendar for residents
+      }
+    }
+    
+    // User's own approved bookings are tappable (green but available)
+    if (status == 'own_approved') {
+      print('🔍 DEBUG: Date $dateKey has USER OWN approved booking - enabled (green)');
+      // Don't return false here, continue to check past dates
+    }
+    
+    // If status is null or not 'approved'/'official_locked', check past dates
+    print('🔍 DEBUG: Date $dateKey is available for booking');
     
     // Default: disable past dates
     final DateTime today = DateTime.now();
@@ -116,18 +147,21 @@ class _EnhancedCalendarState extends State<EnhancedCalendar> {
       case 'event':
         return widget.eventColor ?? Colors.green;
       case 'approved':
-        return widget.bookedColor ?? Colors.green; // Green for all approved bookings
+        return widget.bookedColor ?? Colors.green; // Green for resident-approved bookings
+      case 'own_approved':
+        return widget.bookedColor ?? Colors.green; // Green for user's own approved bookings (tappable)
       case 'pending':
-        return widget.pendingColor ?? Colors.yellow; // Yellow for all pending bookings
+        return widget.pendingColor ?? Colors.yellow; // Yellow for resident-pending bookings
       case 'official_locked':
-        return Colors.grey.shade400; // Gray for official quick bookings (untappable)
+        return Colors.grey.shade400; // Gray for official bookings (locked for everyone)
       case 'official':
-        return Colors.grey.shade400; // Gray for official bookings (untappable)
+        return Colors.grey.shade400; // Gray for official bookings (locked for everyone)
       case 'official_unavailable':
-        return Colors.grey.shade400; // Gray for unavailable dates
+        return Colors.grey.shade400; // Gray for official bookings (locked for everyone)
       case 'available':
+        return widget.availableColor ?? Colors.white; // White for available dates
       default:
-        return widget.availableColor ?? Colors.white; // WHITE for available days
+        return widget.availableColor ?? Colors.white; // Default to white
     }
   }
 

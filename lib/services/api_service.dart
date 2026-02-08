@@ -677,4 +677,23 @@ class ApiService {
       return {'success': false, 'message': e.toString()};
     }
   }
+
+  static Future<Map<String, dynamic>> regenerateFacilityTimeSlots(String facilityId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/facilities/$facilityId/regenerate-timeslots'),
+        headers: await getHeaders(),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return data;
+      } else {
+        return {'success': false, 'message': 'Failed to regenerate time slots'};
+      }
+    } catch (e) {
+      print('❌ regenerateFacilityTimeSlots error: $e');
+      return {'success': false, 'message': e.toString()};
+    }
+  }
 }

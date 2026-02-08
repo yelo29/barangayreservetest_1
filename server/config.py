@@ -21,7 +21,7 @@ class Config:
     
     # Server settings
     HOST = os.getenv('SERVER_HOST', '0.0.0.0')  # Accept all connections
-    PORT = int(os.getenv('SERVER_PORT', 8080))
+    PORT = int(os.getenv('SERVER_PORT', 8000))
     DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
     
     # CORS settings - Allow all origins for DuckDNS flexibility

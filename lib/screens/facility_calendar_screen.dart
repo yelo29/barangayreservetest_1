@@ -103,15 +103,21 @@ class _FacilityCalendarScreenState extends State<FacilityCalendarScreen> {
   }
 
   @override
-  void initState() {
-    super.initState();
-    _loadBookingData();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Refresh data when tab becomes visible again
+    if (mounted) {
+      _loadBookingData();
+    }
   }
 
   Future<void> _loadBookingData() async {
     try {
+      // Initialize current user data from widget.userData
+      _currentUser = widget.userData;
       print('🔍 FacilityCalendarScreen._loadBookingData - fetching bookings for facility: ${widget.facility['id']} (${widget.facility['name']})');
-      print('🔍 Current user email: ${widget.userData?['email']}');
+      print('🔍 Current user email: ${_currentUser?['email']}');
+      print('🔍 Current user role: ${_currentUser?['role']}');
       
       // Use DataService for consistent data fetching (residents only see their own bookings)
       final bookingsResponse = await DataService.fetchBookings();
@@ -156,7 +162,7 @@ class _FacilityCalendarScreenState extends State<FacilityCalendarScreen> {
         for (final booking in pending) {
           final bookingFacilityId = booking['facilityId'] ?? booking['facility_id'];
           if (bookingFacilityId.toString() == widget.facility['id'].toString() && 
-              booking['user_email'] == widget.userData?['email']) {
+              booking['user_email'] == _currentUser?['email']) {
             final date = booking['date'] ?? booking['booking_date'];
             if (date != null) {
               pendingFiltered.putIfAbsent(date, () => []).add(Map<String, dynamic>.from(booking));
@@ -170,7 +176,7 @@ class _FacilityCalendarScreenState extends State<FacilityCalendarScreen> {
           final bookingFacilityId = booking['facilityId'] ?? booking['facility_id'];
           if (bookingFacilityId.toString() == widget.facility['id'].toString()) {
             final String bookingUserEmail = booking['user_email'] ?? '';
-            final String currentUserEmail = widget.userData?['email'] ?? '';
+            final String currentUserEmail = _currentUser?['email'] ?? '';
             final bool isCurrentUserBooking = bookingUserEmail == currentUserEmail;
             final bool isOfficialBooking = bookingUserEmail.contains('official') || 
                                            bookingUserEmail.contains('barangay') ||
@@ -188,14 +194,20 @@ class _FacilityCalendarScreenState extends State<FacilityCalendarScreen> {
         }
 
         // Filter official bookings (for locking)
+        print('🔍🔥🔥 Processing official bookings for calendar locking...');
         for (final booking in officialBookings) {
           final bookingFacilityId = booking['facilityId'] ?? booking['facility_id'];
+          print('🔍🔥🔥 Checking official booking: ID ${booking['id']}, Facility: $bookingFacilityId, Target: ${widget.facility['id']}');
           if (bookingFacilityId.toString() == widget.facility['id'].toString()) {
             final date = booking['date'] ?? booking['booking_date'];
             if (date != null) {
               officialFiltered.putIfAbsent(date, () => []).add(Map<String, dynamic>.from(booking));
-              print('🔍 Added official booking for date: $date by ${booking['user_email']}');
+              print('🔍🔥🔥✅ ADDED official booking for date: $date by ${booking['user_email']} (ID: ${booking['id']})');
+            } else {
+              print('🔍🔥🔥❌ SKIPPED official booking - no date: ${booking['id']}');
             }
+          } else {
+            print('🔍🔥🔥❌ SKIPPED official booking - wrong facility: ${booking['id']} (Facility: $bookingFacilityId vs Target: ${widget.facility['id']})');
           }
         }
 
@@ -233,7 +245,7 @@ class _FacilityCalendarScreenState extends State<FacilityCalendarScreen> {
     }
     
     Map<String, String> statuses = {};
-    final String currentUserEmail = widget.userData?['email'] ?? '';
+    final String currentUserEmail = _currentUser?['email'] ?? '';
     final bool isOfficial = currentUserEmail.contains('official') || 
                            currentUserEmail.contains('barangay') ||
                            currentUserEmail.contains('admin');
@@ -250,26 +262,66 @@ class _FacilityCalendarScreenState extends State<FacilityCalendarScreen> {
       }
     });
 
-    // Add all approved bookings (green) - visible to both roles
+    // 🔥 ROLE-SPECIFIC LOGIC: Different behavior for residents vs officials
+    print('🔍🔍🔍 Building calendar statuses from approved bookings...');
+    print('🔍 DEBUG: User role: ${_currentUser?['role']}, Is Official: $isOfficial');
+    print('🔍 DEBUG: Current user email: ${_currentUser?['email']}');
+    
     _approvedBookings.forEach((date, bookings) {
       if (bookings.isNotEmpty) {
         final formattedDate = _formatDateForCalendar(date);
-        statuses[formattedDate] = 'approved'; // All approved bookings
-        print('🔍 Added approved booking: $date -> $formattedDate');
+        
+        if (isOfficial) {
+          // 👨‍💼 OFFICIALS: Resident approved bookings should NOT lock calendar
+          print('🔍🔍🔍⚪ Resident approved booking IGNORED for OFFICIAL: $date -> $formattedDate (bookings: ${bookings.length})');
+          // Don't add to statuses - show as available for officials
+        } else {
+          // 👥 RESIDENTS: Check if approved booking belongs to current user
+          final bool hasOwnBooking = bookings.any((booking) => 
+            booking['user_email']?.toString() == _currentUser?['email']?.toString()
+          );
+          
+          if (hasOwnBooking) {
+            // Resident's OWN approved booking - show as green in calendar but still tappable
+            statuses[formattedDate] = 'own_approved'; 
+            print('🔍🔍🔍✅ RESIDENT OWN approved booking (GREEN/TAPPABLE): $date -> $formattedDate (bookings: ${bookings.length})');
+          } else {
+            // Other residents' approved bookings - lock calendar
+            statuses[formattedDate] = 'approved'; 
+            print('🔍🔍🔍✅ LOCKED date for RESIDENT (OTHER USER): $date -> $formattedDate (bookings: ${bookings.length})');
+          }
+        }
+        
+        bookings.forEach((booking) {
+          final isOwnBooking = booking['user_email']?.toString() == _currentUser?['email']?.toString();
+          print('   🔍🔍🔍 - Resident Approved Booking: ${booking['user_email']} - ${booking['status']} (ID: ${booking['id']}) ${isOwnBooking ? '(OWN)' : '(OTHER)'}');
+        });
+      } else {
+        print('🔍🔍🔍⚠️ Empty approved bookings for date: $date');
       }
     });
+    // 🔥 END: Role-specific approved booking logic
 
-    // Add official quick bookings (gray, untappable) - visible to both roles
+    // 🔥 ROLE-SPECIFIC LOGIC: Different locking behavior for residents vs officials
+    print('🔥🔥🔥 Building calendar statuses from official bookings...');
+    print('🔍 DEBUG: User role: ${_currentUser?['role']}, Is Official: $isOfficial');
+    
     _officialBookings.forEach((date, bookings) {
       if (bookings.isNotEmpty) {
         final formattedDate = _formatDateForCalendar(date);
-        statuses[formattedDate] = 'official_locked'; // Official quick bookings
-        print('🔍 Added official quick booking: $date -> $formattedDate (bookings: ${bookings.length})');
+        
+        // 🔒 LOCK for BOTH roles: Official bookings block calendar for everyone
+        statuses[formattedDate] = 'official_locked'; 
+        print('🔥🔥🔥✅ LOCKED date for ALL USERS: $date -> $formattedDate (bookings: ${bookings.length})');
+        
         bookings.forEach((booking) {
-          print('   - Booking: ${booking['user_email']} - ${booking['status']}');
+          print('   🔥🔥🔥 - Official Booking: ${booking['user_email']} - ${booking['status']} (ID: ${booking['id']})');
         });
+      } else {
+        print('🔥🔥🔥⚠️ Empty official bookings for date: $date');
       }
     });
+    // 🔥 END: Official bookings lock calendar for everyone
 
     if (mounted) {
       setState(() {
@@ -437,6 +489,8 @@ class _FacilityCalendarScreenState extends State<FacilityCalendarScreen> {
                               _handleDateSelection(selectedDate);
                             },
                             bookingStatuses: _buildBookingStatuses(),
+                            currentUserEmail: _currentUser?['email'],
+                            currentUserRole: _currentUser?['role'],
                           ),
                         ),
                         
@@ -489,7 +543,7 @@ class _FacilityCalendarScreenState extends State<FacilityCalendarScreen> {
   }
 
   void _handleDateSelection(DateTime selectedDate) {
-    final String currentUserEmail = widget.userData?['email'] ?? '';
+    final String currentUserEmail = _currentUser?['email'] ?? '';
     final bool isOfficial = currentUserEmail.contains('official') || 
                            currentUserEmail.contains('barangay') ||
                            currentUserEmail.contains('admin');
@@ -585,13 +639,13 @@ class _FacilityCalendarScreenState extends State<FacilityCalendarScreen> {
   }
 
   void _navigateToBookingForm(DateTime selectedDate) {
-    final String currentUserEmail = widget.userData?['email'] ?? '';
+    final String currentUserEmail = _currentUser?['email'] ?? '';
     final bool isOfficial = currentUserEmail.contains('official') || 
                            currentUserEmail.contains('barangay') ||
                            currentUserEmail.contains('admin');
     
     print('🔍 Opening calendar for facility: ${widget.facility['name']}');
-    print('🔍 Passing user data: ${widget.userData?['email']}');
+    print('🔍 Passing user data: ${_currentUser?['email']}');
     print('🔍 Is official user: $isOfficial');
     
     if (isOfficial) {
@@ -602,7 +656,7 @@ class _FacilityCalendarScreenState extends State<FacilityCalendarScreen> {
           builder: (context) => OfficialBookingFormScreen(
             facility: widget.facility,
             selectedDate: selectedDate,
-            userData: widget.userData,
+            userData: _currentUser,
           ),
         ),
       );
@@ -614,7 +668,7 @@ class _FacilityCalendarScreenState extends State<FacilityCalendarScreen> {
           builder: (context) => BookingFormScreen(
             facility: widget.facility,
             selectedDate: selectedDate,
-            userData: widget.userData,
+            userData: _currentUser,
           ),
         ),
       );
