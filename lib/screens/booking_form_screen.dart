@@ -161,6 +161,25 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
   void initState() {
     super.initState();
     _loadTimeSlotAvailability();
+    // Check ban status immediately when opening booking form
+    _checkBanStatusOnOpen();
+  }
+
+  // Check ban status when booking form opens
+  Future<void> _checkBanStatusOnOpen() async {
+    try {
+      final authApiService = AuthApiService();
+      final wasBanned = await authApiService.checkBanStatusImmediately();
+      if (wasBanned) {
+        // User was banned and logged out, close the form
+        if (mounted) {
+          Navigator.pop(context);
+        }
+        return;
+      }
+    } catch (e) {
+      print('🔍 Error checking ban status on form open: $e');
+    }
   }
 
   // Helper method to check if current user is an official
@@ -691,6 +710,18 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
   Future<void> _submitBooking() async {
     if (!_formKey.currentState!.validate()) {
       return;
+    }
+    
+    // IMMEDIATE BAN CHECK before booking submission
+    try {
+      final authApiService = AuthApiService();
+      final wasBanned = await authApiService.checkBanStatusImmediately();
+      if (wasBanned) {
+        // User was banned and logged out, don't submit booking
+        return;
+      }
+    } catch (e) {
+      print(' Error checking ban status before booking: $e');
     }
     
     if (_selectedTimeSlot.isEmpty) {
