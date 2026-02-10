@@ -138,17 +138,28 @@ class _OfficialBookingFormScreenState extends State<OfficialBookingFormScreen> {
               return matches;
             }).toList();
             
-            final hasResidentBooking = matchingResidentBookings.isNotEmpty;
+            // CRITICAL FIX: Filter out rejected bookings - they should not occupy time slots
+            final activeResidentBookings = matchingResidentBookings.where((booking) {
+              final status = booking['status']?.toString().toLowerCase() ?? '';
+              final isRejected = status == 'rejected';
+              if (isRejected) {
+                DebugLogger.ui('🔍 FILTERING OUT rejected booking: ${booking['start_time']} - ${booking['status']}');
+              }
+              return !isRejected; // Only keep non-rejected bookings
+            }).toList();
+            
+            final hasResidentBooking = activeResidentBookings.isNotEmpty;
             
             DebugLogger.ui('🔍 Time slot matching - Found ${matchingResidentBookings.length} matching bookings for "$timeSlot"');
+            DebugLogger.ui('🔍 Time slot matching - Found ${activeResidentBookings.length} ACTIVE bookings for "$timeSlot"');
             if (matchingResidentBookings.isNotEmpty) {
               for (int i = 0; i < matchingResidentBookings.length; i++) {
                 DebugLogger.ui('🔍 Time slot matching - Match $i: ${matchingResidentBookings[i]['start_time']} (${matchingResidentBookings[i]['status']})');
               }
             }
             
-            // For display, we'll show the first booking, but store all for the dialog
-            final residentBooking = hasResidentBooking ? matchingResidentBookings.first : <String, dynamic>{};
+            // For display, we'll show the first ACTIVE booking, not just any booking
+            final residentBooking = hasResidentBooking ? activeResidentBookings.first : <String, dynamic>{};
             
             DebugLogger.ui('🔍 Time slot "$timeSlot" - has_resident_booking: $hasResidentBooking, status: ${hasResidentBooking ? (residentBooking['status'] == 'approved' ? 'approved' : 'pending') : 'available'}, background: ${hasResidentBooking ? (residentBooking['status'] == 'approved' ? 'Colors.green.shade100' : 'Colors.yellow.shade100') : 'Colors.grey.shade100'}');
             
@@ -158,8 +169,8 @@ class _OfficialBookingFormScreenState extends State<OfficialBookingFormScreen> {
               'is_available': !hasResidentBooking,
               'has_resident_booking': hasResidentBooking,
               'resident_booking': residentBooking,
-              'all_resident_bookings': matchingResidentBookings, // Store all matching bookings
-              'resident_count': matchingResidentBookings.length, // Add count for display
+              'all_resident_bookings': activeResidentBookings, // Store only ACTIVE bookings for display
+              'resident_count': activeResidentBookings.length, // Count only ACTIVE bookings
               'status': hasResidentBooking ? (residentBooking['status'] == 'approved' ? 'approved' : 'pending') : 'available',
               'background_color': hasResidentBooking 
                 ? (residentBooking['status'] == 'approved' ? Colors.green.shade100 : Colors.yellow.shade100)
