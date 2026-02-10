@@ -318,6 +318,22 @@ class _OfficialHomeTabState extends State<OfficialHomeTab> {
     }
   }
 
+  // Refresh data method
+  Future<void> _refreshData() async {
+    setState(() {
+      _isLoading = true;
+    });
+    
+    // Reload facilities and user data
+    await _loadFacilities();
+    
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -354,6 +370,13 @@ class _OfficialHomeTabState extends State<OfficialHomeTab> {
                                 fontWeight: FontWeight.bold,
                                 color: Colors.red,
                               ),
+                            ),
+                            const Spacer(),
+                            // Refresh button
+                            IconButton(
+                              onPressed: _refreshData,
+                              icon: Icon(Icons.refresh, color: Colors.red.shade700),
+                              tooltip: 'Refresh',
                             ),
                           ],
                         ),

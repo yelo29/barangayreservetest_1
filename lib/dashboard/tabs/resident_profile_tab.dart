@@ -80,6 +80,22 @@ class _ResidentProfileTabState extends State<ResidentProfileTab> {
     }
   }
 
+  // Refresh data method
+  Future<void> _refreshData() async {
+    setState(() {
+      _isLoading = true;
+    });
+    
+    // Reload user data
+    await _loadUserData();
+    
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -227,6 +243,12 @@ class _ResidentProfileTabState extends State<ResidentProfileTab> {
                               ),
                           ],
                         ),
+                      ),
+                      // Refresh button
+                      IconButton(
+                        onPressed: _refreshData,
+                        icon: const Icon(Icons.refresh, color: Colors.white),
+                        tooltip: 'Refresh Profile',
                       ),
                     ],
                   ),

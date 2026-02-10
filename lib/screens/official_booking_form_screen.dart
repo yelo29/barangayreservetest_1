@@ -506,6 +506,16 @@ class _OfficialBookingFormScreenState extends State<OfficialBookingFormScreen> {
           ),
         ),
         actions: [
+          // Only show Reject button for pending bookings
+          if (allResidentBookings.first['status'] == 'pending')
+            TextButton.icon(
+              onPressed: () {
+                Navigator.pop(context); // Close details dialog
+                _rejectResidentBooking(allResidentBookings.first); // Reject the booking
+              },
+              icon: const Icon(Icons.cancel, color: Colors.red),
+              label: const Text('Reject', style: TextStyle(color: Colors.red)),
+            ),
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Close'),
@@ -513,6 +523,107 @@ class _OfficialBookingFormScreenState extends State<OfficialBookingFormScreen> {
         ],
       ),
     );
+  }
+
+  // NEW: Reject resident booking with violation tracking dialog
+  Future<void> _rejectResidentBooking(Map<String, dynamic> residentBooking) async {
+    final bookingId = residentBooking['id'];
+    final userEmail = residentBooking['user_email'];
+    
+    // Show rejection reason dialog
+    String? selectedRejectionType;
+    
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reject Booking'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Reject booking for ${residentBooking['full_name']}?'),
+            const SizedBox(height: 16),
+            const Text(
+              'Select rejection reason:',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            StatefulBuilder(
+              builder: (context, setState) {
+                return Column(
+                  children: [
+                    RadioListTile<String>(
+                      title: const Text('Rejected (because of incorrect amount of downpayment)'),
+                      value: 'incorrect_downpayment',
+                      groupValue: selectedRejectionType,
+                      onChanged: (value) {
+                        setState(() => selectedRejectionType = value);
+                      },
+                    ),
+                    RadioListTile<String>(
+                      title: const Text('Rejected (because of fake receipt/no downpayment/payment)'),
+                      value: 'fake_receipt',
+                      groupValue: selectedRejectionType,
+                      onChanged: (value) {
+                        setState(() => selectedRejectionType = value);
+                      },
+                    ),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: selectedRejectionType != null
+                ? () {
+                    Navigator.pop(context);
+                    _executeRejection(residentBooking, selectedRejectionType!);
+                  }
+                : null,
+            child: const Text('Reject'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // NEW: Execute the rejection with proper reason and type
+  Future<void> _executeRejection(Map<String, dynamic> residentBooking, String rejectionType) async {
+    try {
+      final bookingId = residentBooking['id'];
+      
+      String rejectionReason;
+      if (rejectionType == 'incorrect_downpayment') {
+        rejectionReason = 'The amount of your down payment is incorrect, please verify your payment and try again.';
+      } else {
+        rejectionReason = 'Your payment receipt is fake or shown no payment in our payment history/records, ⚠️ know that this violation will be recorded and you will only have three chances before getting your account banned!';
+      }
+      
+      DebugLogger.ui('🔍 Rejecting resident booking: ID=$bookingId, Type=$rejectionType');
+      
+      final response = await api_service.ApiService.updateBookingStatus(
+        bookingId,
+        'rejected',
+        rejectionReason: rejectionReason,
+        rejectionType: rejectionType,
+      );
+      
+      if (response['success'] == true) {
+        _showSuccessSnackBar('Booking rejected successfully');
+        // Refresh the time slots to update the UI
+        _loadTimeSlots();
+      } else {
+        _showErrorSnackBar('Failed to reject booking: ${response['error'] ?? response['message']}');
+      }
+    } catch (e) {
+      _showErrorSnackBar('Error rejecting booking: $e');
+    }
   }
 
   Widget _buildDetailRow(String label, String value) {
@@ -724,7 +835,8 @@ class _OfficialBookingFormScreenState extends State<OfficialBookingFormScreen> {
         final response = await api_service.ApiService.updateBookingStatus(
           intBookingId, 
           'rejected', 
-          rejectionReason: rejectionReason
+          rejectionReason: rejectionReason,
+          rejectionType: 'official_overlap'  // This doesn't count as violation
         );
         
         DebugLogger.ui('🔍 _rejectResidentBooking response: $response');

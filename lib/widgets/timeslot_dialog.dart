@@ -30,15 +30,16 @@ class _TimeslotDialogState extends State<TimeslotDialog> {
     final userPending = widget.userBookings?.containsKey(timeslot) == true && 
                        widget.userBookings?[timeslot]['status'] == 'pending';
     
-    // Check if timeslot is available (no other bookings)
-    final hasOtherBookings = widget.allBookings?.containsKey(timeslot) == true;
+    // Check if ANY resident has booking for this timeslot (pending or approved)
+    final hasAnyResidentBooking = widget.allBookings?.containsKey(timeslot) == true;
     
     if (userApproved) {
       return {'status': 'user_approved', 'color': Colors.green, 'enabled': false};
     } else if (userPending) {
       return {'status': 'user_pending', 'color': Colors.yellow, 'enabled': true};
-    } else if (hasOtherBookings) {
-      return {'status': 'competitive', 'color': Colors.white, 'enabled': true};
+    } else if (hasAnyResidentBooking) {
+      // Lock timeslot if any resident has booking (prevents competitive booking)
+      return {'status': 'other_resident_booked', 'color': Colors.grey.shade300, 'enabled': false};
     } else {
       return {'status': 'available', 'color': Colors.white, 'enabled': true};
     }
@@ -51,8 +52,8 @@ class _TimeslotDialogState extends State<TimeslotDialog> {
         return 'Your approved booking';
       case 'user_pending':
         return 'Your pending booking';
-      case 'competitive':
-        return 'Competitive slot available';
+      case 'other_resident_booked':
+        return 'Booked by other resident';
       case 'available':
         return 'Available';
       default:
@@ -68,8 +69,8 @@ class _TimeslotDialogState extends State<TimeslotDialog> {
       return const Icon(Icons.pending, color: Colors.orange);
     } else if (isSelected) {
       return const Icon(Icons.check, color: Colors.blue);
-    } else if (timeslotStatus['status'] == 'competitive') {
-      return const Icon(Icons.people, color: Colors.grey, size: 16);
+    } else if (timeslotStatus['status'] == 'other_resident_booked') {
+      return const Icon(Icons.lock, color: Colors.grey, size: 16);
     }
     return null;
   }

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'utils/debug_logger.dart';
 import 'services/auth_api_service.dart';
+import 'services/ban_detection_service.dart';
 import 'screens/selection_screen.dart';
 import 'config/app_config.dart';
 
@@ -34,7 +35,9 @@ class MyApp extends StatelessWidget {
       title: 'Barangay Reserve',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(fontFamily: 'Roboto'),
-      home: const SelectionScreen(),
+      home: SelectionScreen(
+        navigatorKey: GlobalKey<NavigatorState>(), // Pass navigator key to selection screen
+      ),
     );
   }
 }

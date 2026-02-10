@@ -91,6 +91,22 @@ class _OfficialAuthenticationTabState extends State<OfficialAuthenticationTab> {
     });
   }
 
+  // Refresh data method
+  Future<void> _refreshData() async {
+    setState(() {
+      _isLoading = true;
+    });
+    
+    // Reload verification requests
+    await _loadVerificationRequests();
+    
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -111,14 +127,25 @@ class _OfficialAuthenticationTabState extends State<OfficialAuthenticationTab> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Authentication Requests',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                  Row(
+                  children: [
+                    const Text(
+                      'Authentication Requests',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
                     ),
-                  ),
+                    const Spacer(),
+                    // Refresh button
+                    IconButton(
+                      onPressed: _refreshData,
+                      icon: const Icon(Icons.refresh, color: Colors.white),
+                      tooltip: 'Refresh',
+                    ),
+                  ],
+                ),
                   const SizedBox(height: 8),
                   Text(
                     'Review resident verification requests',
@@ -365,7 +392,7 @@ class _OfficialAuthenticationTabState extends State<OfficialAuthenticationTab> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: ElevatedButton.icon(
-                          onPressed: () => _showApproveDialog(request['id'], request['verification_type']),
+                          onPressed: () => _updateVerificationStatus(request['id'], 'approved'),
                           icon: const Icon(Icons.check),
                           label: const Text('Approve'),
                           style: ElevatedButton.styleFrom(
@@ -605,66 +632,6 @@ class _OfficialAuthenticationTabState extends State<OfficialAuthenticationTab> {
         );
       }
     }
-  }
-
-  void _showApproveDialog(int requestId, String? verificationType) {
-    String selectedDiscount = '0.10'; // Default to resident
-    
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('Approve Verification'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Verification Type: ${verificationType ?? 'Unknown'}'),
-              const SizedBox(height: 16),
-              const Text('Select discount rate:'),
-              const SizedBox(height: 8),
-              RadioListTile<String>(
-                title: const Text('10% (Resident)'),
-                value: '0.10',
-                groupValue: selectedDiscount,
-                onChanged: (value) {
-                  setState(() {
-                    selectedDiscount = value!;
-                  });
-                },
-              ),
-              RadioListTile<String>(
-                title: const Text('5% (Non-Resident)'),
-                value: '0.05',
-                groupValue: selectedDiscount,
-                onChanged: (value) {
-                  setState(() {
-                    selectedDiscount = value!;
-                  });
-                },
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                _updateVerificationStatus(requestId, 'approved', discountRate: double.parse(selectedDiscount));
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('Approve'),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   String _formatDate(dynamic date) {
