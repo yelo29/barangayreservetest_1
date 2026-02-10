@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 import '../services/base64_image_service.dart';
-import '../services/api_service.dart';
 
 class BookingDetailScreen extends StatefulWidget {
   final Map<String, dynamic> booking;
@@ -15,52 +15,10 @@ class BookingDetailScreen extends StatefulWidget {
 }
 
 class _BookingDetailScreenState extends State<BookingDetailScreen> {
-  bool _isUpdating = false;
-
   String _getSafeString(dynamic value) {
     if (value == null) return 'Not provided';
     if (value is String && value.isEmpty) return 'Not provided';
     return value.toString();
-  }
-
-  Future<void> _updateBookingStatus(String status) async {
-    setState(() {
-      _isUpdating = true;
-    });
-
-    try {
-      final bookingId = int.parse(widget.booking['id'].toString());
-      final result = await ApiService.updateBookingStatus(bookingId, status);
-      
-      if (result['success']) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Booking ${status} successfully!'),
-            backgroundColor: status == 'approved' ? Colors.green : Colors.orange,
-          ),
-        );
-        // Return true to indicate the booking was updated
-        Navigator.pop(context, true);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(result['message'] ?? 'Failed to update booking'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error updating booking: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    } finally {
-      setState(() {
-        _isUpdating = false;
-      });
-    }
   }
 
   @override
@@ -203,48 +161,20 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
                     ),
                   ]),
             
-            // Action Buttons
+            // Status Display
             if (widget.booking['status'] == 'pending') ...[
-              Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: _isUpdating ? null : () => _updateBookingStatus('approved'),
-                      icon: _isUpdating 
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.check),
-                      label: Text(_isUpdating ? 'Approving...' : 'Approve'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                    ),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: null,
+                  icon: const Icon(Icons.pending),
+                  label: const Text('Pending Approval'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: _isUpdating ? null : () => _updateBookingStatus('rejected'),
-                      icon: _isUpdating 
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.close),
-                      label: Text(_isUpdating ? 'Rejecting...' : 'Reject'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               ),
             ] else if (widget.booking['status'] == 'approved') ...[
               SizedBox(
