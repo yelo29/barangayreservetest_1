@@ -1258,6 +1258,8 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
                               ),
                               const SizedBox(height: 4),
                               Text(
+                                'Merchant Number: 09079267391\n'
+                                'Merchant Name: JO*N RO**C A\n'
                                 'Tap to view full screen',
                                 style: TextStyle(
                                   fontSize: 10,
