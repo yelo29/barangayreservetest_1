@@ -284,7 +284,18 @@ class ApiService {
         // Handle response and check for ban status
         return await _handleApiResponse(data, 'createBooking');
       } else {
-        return {'success': false, 'error': 'HTTP ${response.statusCode}'};
+        // Try to parse error response for detailed error information
+        try {
+          final errorData = json.decode(response.body);
+          return {
+            'success': false, 
+            'error': errorData['message'] ?? 'HTTP ${response.statusCode}',
+            'error_type': errorData['error_type'],
+            'ban_reason': errorData['ban_reason']
+          };
+        } catch (e) {
+          return {'success': false, 'error': 'HTTP ${response.statusCode}'};
+        }
       }
     } catch (e) {
       print('❌ createBooking exception: $e');

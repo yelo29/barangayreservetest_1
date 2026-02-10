@@ -768,9 +768,19 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
           );
           Navigator.pop(context);
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to submit booking: ${result['error'] ?? 'Unknown error'}')),
-          );
+          // Check if this is a ban error
+          if (result['error_type'] == 'user_banned') {
+            // Show ban dialog instead of generic error
+            BanValidationService.showBanDialog(context, {
+              'reason': 'Account is banned',
+              'ban_reason': result['ban_reason'] ?? 'Account has been banned by administrator.'
+            });
+          } else {
+            // Show generic error for other cases
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Failed to submit booking: ${result['error'] ?? 'Unknown error'}')),
+            );
+          }
         }
       }
     } catch (e) {
