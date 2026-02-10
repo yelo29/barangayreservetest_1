@@ -1026,6 +1026,18 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
                                   isDisabled = true; // Pending bookings - untappable for residents, tappable for officials to see details
                                   statusIcon = Icons.pending;
                                   break;
+                                case 'booked':
+                                  backgroundColor = Colors.grey.shade100; // Gray for booked slots by other residents
+                                  textColor = Colors.grey.shade700;
+                                  isDisabled = true; // Booked slots - untappable for residents, tappable for officials to see details
+                                  statusIcon = Icons.block;
+                                  break;
+                                case 'competitive':
+                                  backgroundColor = Colors.red.shade50;
+                                  textColor = Colors.red.shade700;
+                                  isDisabled = true; // Competitive slots - untappable for residents
+                                  statusIcon = Icons.priority_high;
+                                  break;
                                 case 'available':
                                 default:
                                   backgroundColor = Colors.white;
@@ -1041,7 +1053,7 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
                                                          currentUserEmail.contains('barangay') ||
                                                          currentUserEmail.contains('admin');
                                   
-                                  if (isOfficial && (status == 'pending' || status == 'approved')) {
+                                  if (isOfficial && (status == 'pending' || status == 'approved' || status == 'booked')) {
                                     // Officials can tap booked slots to see details
                                     _showOfficialTimeSlotDetails(timeSlot);
                                   } else if (!isDisabled) {
