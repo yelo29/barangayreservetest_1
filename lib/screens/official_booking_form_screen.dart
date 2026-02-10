@@ -616,7 +616,8 @@ class _OfficialBookingFormScreenState extends State<OfficialBookingFormScreen> {
       
       if (response['success'] == true) {
         _showSuccessSnackBar('Booking rejected successfully');
-        // Refresh the time slots to update the UI
+        // Refresh both resident bookings and time slots to update the UI
+        await _loadResidentBookings();
         _loadTimeSlots();
       } else {
         _showErrorSnackBar('Failed to reject booking: ${response['error'] ?? response['message']}');
