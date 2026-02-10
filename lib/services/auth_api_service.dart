@@ -56,7 +56,8 @@ class AuthApiService {
     if (_currentUser != null && _currentUser!['email'] != null) {
       print('🔍 Starting periodic ban check for user: ${_currentUser!['email']}');
       
-      _banCheckTimer = Timer.periodic(const Duration(seconds: 30), (timer) async {
+      // REDUCED INTERVAL: Check every 5 seconds for faster ban detection
+      _banCheckTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
         await _checkUserBanStatus();
       });
     }
@@ -111,6 +112,52 @@ class AuthApiService {
       }
     } catch (e) {
       print('🔍 Error in periodic ban check: $e');
+    }
+  }
+
+  // IMMEDIATE BAN CHECK: Check ban status immediately (called from UI interactions)
+  Future<bool> checkBanStatusImmediately() async {
+    if (_currentUser == null || _currentUser!['email'] == null) {
+      return false;
+    }
+
+    try {
+      print('🔍 Performing IMMEDIATE ban check for user: ${_currentUser!['email']}');
+      
+      // Get fresh user profile from server
+      final profileResponse = await api.ApiService.getUserProfile(_currentUser!['email']);
+      
+      if (profileResponse['success'] == true && profileResponse['user'] != null) {
+        final userData = profileResponse['user'];
+        
+        // Check ban status - handle both boolean and integer formats
+        dynamic bannedValue = userData['is_banned'] ?? false;
+        bool isCurrentlyBanned = bannedValue is bool ? bannedValue : (bannedValue == 1 || bannedValue == true);
+        
+        print('🔍 IMMEDIATE ban check result:');
+        print('  - User email: ${_currentUser!['email']}');
+        print('  - is_banned value: $bannedValue');
+        print('  - is_banned type: ${bannedValue.runtimeType}');
+        print('  - isCurrentlyBanned: $isCurrentlyBanned');
+        print('  - Previous cached ban status: ${_currentUser!['is_banned']}');
+        
+        // CRITICAL: If user is now banned but wasn't before, force logout
+        if (isCurrentlyBanned && !(_currentUser!['is_banned'] == true)) {
+          print('🚨 IMMEDIATE BAN DETECTED - FORCING AUTOMATIC LOGOUT');
+          await _forceLogoutForBannedUser(userData['ban_reason'] ?? 'Your account has been banned');
+          return true; // User was banned and logged out
+        }
+        
+        // Update local ban status
+        _currentUser!['is_banned'] = isCurrentlyBanned;
+        return false; // User is not newly banned
+      } else {
+        print('🔍 Failed to fetch user profile for immediate check: ${profileResponse['error']}');
+        return false;
+      }
+    } catch (e) {
+      print('🔍 Error in immediate ban check: $e');
+      return false;
     }
   }
 

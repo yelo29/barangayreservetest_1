@@ -111,6 +111,26 @@ class _ResidentHomeTabState extends State<ResidentHomeTab> {
     _loadFacilities();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Check ban status when widget becomes active
+    _checkBanStatusOnActivation();
+  }
+
+  // Check ban status when tab becomes active
+  Future<void> _checkBanStatusOnActivation() async {
+    try {
+      final wasBanned = await _authApiService.checkBanStatusImmediately();
+      if (wasBanned) {
+        // User was banned and logged out, no need to continue
+        return;
+      }
+    } catch (e) {
+      print('🔍 Error checking ban status on activation: $e');
+    }
+  }
+
   // Fallback facilities data if API fails
   List<Map<String, dynamic>> _getFallbackFacilities() {
     return [
@@ -585,17 +605,20 @@ class _ResidentHomeTabState extends State<ResidentHomeTab> {
     print('🔍 Opening calendar for facility: ${facility['name']}');
     print('🔍 Passing user data: ${_currentUser?['email']}');
     
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => FacilityCalendarScreen(
-          facility: facility,
-          userData: _currentUser,
+    // IMMEDIATE BAN CHECK before navigation
+    _checkBanBeforeNavigation('facility_calendar', () {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => FacilityCalendarScreen(
+            facility: facility,
+            userData: _currentUser,
+          ),
         ),
-      ),
-    ).then((_) {
-      // Refresh user data when returning from calendar
-      _loadUserData();
+      ).then((_) {
+        // Refresh user data when returning from calendar
+        _loadUserData();
+      });
     });
   }
 
@@ -603,21 +626,45 @@ class _ResidentHomeTabState extends State<ResidentHomeTab> {
     print('🔍 Opening booking form for facility: ${facility['name']}');
     print('🔍 Passing user data: ${_currentUser?['email']}');
     
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => BookingFormScreen(
-          facility: facility,
-          selectedDate: DateTime.now(),
-          userData: _currentUser,
+    // IMMEDIATE BAN CHECK before navigation
+    _checkBanBeforeNavigation('booking_form', () {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => BookingFormScreen(
+            facility: facility,
+            selectedDate: DateTime.now(),
+            userData: _currentUser,
+          ),
         ),
-      ),
-    ).then((result) {
-      if (result == true) {
-        // Refresh data after successful booking
-        _loadFacilities();
-      }
+      ).then((result) {
+        if (result == true) {
+          // Refresh data after successful booking
+          _loadFacilities();
+        }
+      });
     });
+  }
+
+  // Check ban status before navigation
+  Future<void> _checkBanBeforeNavigation(String navigationType, VoidCallback onAllowed) async {
+    try {
+      print('🔍 Checking ban status before $navigationType navigation');
+      
+      final wasBanned = await _authApiService.checkBanStatusImmediately();
+      if (wasBanned) {
+        // User was banned and logged out, don't navigate
+        print('🚨 Navigation blocked due to ban status');
+        return;
+      }
+      
+      // User is not banned, proceed with navigation
+      onAllowed();
+    } catch (e) {
+      print('🔍 Error checking ban status before navigation: $e');
+      // On error, allow navigation (fail-safe)
+      onAllowed();
+    }
   }
 
   // Verification helper methods
