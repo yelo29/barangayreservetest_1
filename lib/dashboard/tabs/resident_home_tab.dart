@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import '../../../services/data_service.dart';
 import '../../../services/auth_api_service.dart';
+import '../../../services/api_service.dart';
 import '../../../widgets/loading_widget.dart';
 import '../../../utils/debug_logger.dart';
 import '../../../screens/facility_calendar_screen.dart';
@@ -19,6 +20,11 @@ class ResidentHomeTab extends StatefulWidget {
 
 class _ResidentHomeTabState extends State<ResidentHomeTab> {
   List<Map<String, dynamic>> _facilities = [];
+  Map<String, dynamic>? _currentUser;
+  bool _isLoading = false;
+  bool _isLoadingFacilities = false;
+  AuthApiService _authApiService = AuthApiService();
+  
   // Helper function to get facility rate with fallback
   String _getFacilityRate(Map<String, dynamic> facility) {
     // Check multiple possible field names
@@ -97,11 +103,6 @@ class _ResidentHomeTabState extends State<ResidentHomeTab> {
     
     return amenities.toString();
   }
-
-  bool _isLoadingFacilities = true;
-  bool _isLoading = true;
-  Map<String, dynamic>? _currentUser;
-  AuthApiService _authApiService = AuthApiService();
 
   @override
   void initState() {
@@ -259,6 +260,25 @@ class _ResidentHomeTabState extends State<ResidentHomeTab> {
     }
   }
 
+  // Refresh data method
+  Future<void> _refreshData() async {
+    setState(() {
+      _isLoadingFacilities = true;
+      _isLoading = true;
+    });
+    
+    // Reload user data and facilities
+    await _loadUserData();
+    await _loadFacilities();
+    
+    if (mounted) {
+      setState(() {
+        _isLoadingFacilities = false;
+        _isLoading = false;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -291,6 +311,12 @@ class _ResidentHomeTabState extends State<ResidentHomeTab> {
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),
+                      ),
+                      // Refresh button
+                      IconButton(
+                        onPressed: _refreshData,
+                        icon: const Icon(Icons.refresh, color: Colors.white),
+                        tooltip: 'Refresh',
                       ),
                     ],
                   ),
@@ -558,6 +584,7 @@ class _ResidentHomeTabState extends State<ResidentHomeTab> {
   void _showFacilityCalendar(Map<String, dynamic> facility) {
     print('🔍 Opening calendar for facility: ${facility['name']}');
     print('🔍 Passing user data: ${_currentUser?['email']}');
+    
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -575,6 +602,7 @@ class _ResidentHomeTabState extends State<ResidentHomeTab> {
   void _showBookingForm(Map<String, dynamic> facility) {
     print('🔍 Opening booking form for facility: ${facility['name']}');
     print('🔍 Passing user data: ${_currentUser?['email']}');
+    
     Navigator.push(
       context,
       MaterialPageRoute(
