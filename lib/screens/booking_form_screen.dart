@@ -6,9 +6,12 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:intl/intl.dart';
+import 'package:http/http.dart' as http;
 import '../services/data_service.dart';
 import '../services/auth_api_service.dart';
-import '../services/api_service_updated.dart' as api_service;
+import '../services/api_service.dart' as api;
+import '../services/api_service.dart';
+import '../config/app_config.dart';
 import '../widgets/loading_widget.dart';
 import '../utils/debug_logger.dart';
 import 'facility_calendar_screen.dart';
@@ -178,93 +181,97 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
     try {
       print('🔍 Loading time slot availability for date: ${widget.selectedDate.toIso8601String().split('T')[0]}');
       
-      // Add timeout to prevent long waiting
-      final bookingsResponse = await DataService.fetchBookings().timeout(
+      // Use the real-time availability API instead of fetchBookings
+      final selectedDate = widget.selectedDate.toIso8601String().split('T')[0];
+      final availabilityResponse = await http.get(
+        Uri.parse('${AppConfig.baseUrl}/api/available-timeslots?facility_id=${widget.facility['id']}&date=$selectedDate'),
+        headers: await api.ApiService.getHeaders(),
+      ).then((response) async {
+        final data = json.decode(response.body);
+        return {
+          'success': response.statusCode == 200,
+          'data': data,
+          'statusCode': response.statusCode
+        };
+      }).timeout(
         const Duration(seconds: 10),
         onTimeout: () {
           throw Exception('Connection timeout after 10 seconds');
         },
       );
       
-      if (bookingsResponse['success'] == true) {
-        final List<Map<String, dynamic>> allBookings = List<Map<String, dynamic>>.from(bookingsResponse['data'] ?? []);
-        print('🔍 Filtering bookings for date: ${widget.selectedDate.toIso8601String().split('T')[0]}');
+      if (availabilityResponse['success'] == true) {
+        final data = availabilityResponse['data'];
+        final List<String> availableSlots = List<String>.from(data['available_timeslots'] ?? []);
+        final List<String> userBookedSlots = List<String>.from(data['user_booked_timeslots'] ?? []);
+        final List<String> competitiveSlots = List<String>.from(data['competitive_timeslots'] ?? []);
         
-        String selectedDate = widget.selectedDate.toIso8601String().split('T')[0];
+        print('🔍 Available slots: ${availableSlots.length}');
+        print('🔍 User booked slots: ${userBookedSlots.length}');
+        print('🔍 Competitive slots: ${competitiveSlots.length}');
         
-        // Filter bookings for this facility and date
-        List<Map<String, dynamic>> facilityBookings = allBookings.where((booking) {
-          return booking['facility_id'] == widget.facility['id'] && 
-                 (booking['date'] == selectedDate || booking['booking_date'] == selectedDate);
-        }).toList();
-        
-        print('🔍 Found ${facilityBookings.length} bookings for this facility and date');
-        
-        // Initialize all time slots as available
+        // Initialize all time slots with their real-time status
         Map<String, String> statusMap = {};
         for (String timeSlot in _timeSlots) {
-          statusMap[timeSlot] = 'available';
+          if (availableSlots.contains(timeSlot)) {
+            statusMap[timeSlot] = 'available';
+          } else if (userBookedSlots.contains(timeSlot)) {
+            statusMap[timeSlot] = 'booked'; // Could be pending or approved
+          } else if (competitiveSlots.contains(timeSlot)) {
+            statusMap[timeSlot] = 'competitive';
+          } else {
+            statusMap[timeSlot] = 'available'; // Default to available
+          }
         }
         
-        // Check for existing bookings
-        for (final booking in facilityBookings) {
-          String? bookingTimeSlot = booking['time_slot'] ?? booking['timeslot'];
-          
-          // If time_slot is not available, try to construct from start_time and end_time
-          if (bookingTimeSlot == null) {
-            final startTime = booking['start_time'] ?? '';
-            final endTime = booking['end_time'] ?? '';
-            if (startTime.isNotEmpty && endTime.isNotEmpty) {
-              bookingTimeSlot = '$startTime - $endTime';
-            }
-          }
-          
-          // Fallback to time_slot_id if still null
-          if (bookingTimeSlot == null && booking['time_slot_id'] != null) {
-            bookingTimeSlot = _getTimeSlotFromId(booking['time_slot_id']);
-          }
-          
-          // Try multiple matching strategies for time slot comparison
-          if (bookingTimeSlot != null) {
-            String? matchedTimeSlot;
+        // Get current user's bookings to determine if booked slots are pending or approved
+        String currentUserEmail = widget.userData?['email'] ?? '';
+        if (currentUserEmail.isNotEmpty && userBookedSlots.isNotEmpty) {
+          try {
+            final bookingsResponse = await DataService.fetchBookings(
+              facilityId: widget.facility['id'].toString(),
+              date: widget.selectedDate.toIso8601String().split('T')[0],
+            );
             
-            // Try exact match first
-            if (_timeSlots.contains(bookingTimeSlot)) {
-              matchedTimeSlot = bookingTimeSlot;
-            } else {
-              // Try fuzzy matching - normalize both strings and check for partial matches
-              for (String displaySlot in _timeSlots) {
-                final normalizedSlot = displaySlot.replaceAll(':', '').replaceAll(' ', '').replaceAll('AM', 'AM').replaceAll('PM', 'PM').toUpperCase();
-                final normalizedBooking = bookingTimeSlot.replaceAll(':', '').replaceAll(' ', '').replaceAll('AM', 'AM').replaceAll('PM', 'PM').toUpperCase();
-                
-                // Check for partial match or contains relationship
-                if (normalizedBooking.contains(normalizedSlot) || 
-                    normalizedSlot.contains(normalizedBooking) ||
-                    bookingTimeSlot.contains(displaySlot) ||
-                    displaySlot.contains(bookingTimeSlot)) {
-                  matchedTimeSlot = displaySlot;
-                  break;
-                }
-              }
-            }
-            
-            if (matchedTimeSlot != null) {
-              String currentUserEmail = widget.userData?['email'] ?? '';
-              String bookingUserEmail = booking['user_email'] ?? '';
-              String bookingStatus = booking['status'] ?? 'pending';
+            if (bookingsResponse['success'] == true) {
+              final List<Map<String, dynamic>> allBookings = List<Map<String, dynamic>>.from(bookingsResponse['data'] ?? []);
               
-              // For residents: Only show their own bookings
-              // For officials: Show all bookings (for refund processing)
-              if (bookingUserEmail == currentUserEmail || _isOfficial) {
-                if (bookingStatus == 'approved') {
-                  statusMap[matchedTimeSlot] = 'approved'; // Green - approved booking
-                } else {
-                  statusMap[matchedTimeSlot] = 'pending'; // Yellow - pending booking
+              // Filter bookings for current user
+              final userBookings = allBookings.where((booking) {
+                return booking['user_email'] == currentUserEmail;
+              }).toList();
+              
+              // Update status for user's own bookings
+              for (final booking in userBookings) {
+                String? bookingTimeSlot = booking['time_slot'] ?? booking['timeslot'];
+                
+                // Try to construct from start_time and end_time
+                if (bookingTimeSlot == null) {
+                  final startTime = booking['start_time'] ?? '';
+                  final endTime = booking['end_time'] ?? '';
+                  if (startTime.isNotEmpty && endTime.isNotEmpty) {
+                    bookingTimeSlot = '$startTime - $endTime';
+                  }
                 }
                 
-                print('🔍 Matched booking: $bookingTimeSlot -> $matchedTimeSlot for user $bookingUserEmail (${bookingStatus})');
+                // Find matching time slot
+                if (bookingTimeSlot != null) {
+                  for (String displaySlot in _timeSlots) {
+                    if (displaySlot.contains(bookingTimeSlot) || bookingTimeSlot.contains(displaySlot)) {
+                      String bookingStatus = booking['status'] ?? 'pending';
+                      if (bookingStatus == 'approved') {
+                        statusMap[displaySlot] = 'approved';
+                      } else if (bookingStatus == 'pending') {
+                        statusMap[displaySlot] = 'pending';
+                      }
+                      break;
+                    }
+                  }
+                }
               }
             }
+          } catch (e) {
+            print('⚠️ Could not fetch user bookings: $e');
           }
         }
         
@@ -740,7 +747,7 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
       }
 
       // Submit booking using API service
-      final result = await api_service.ApiService.createBooking(bookingData);
+      final result = await api.ApiService.createBooking(bookingData);
       
       if (mounted) {
         if (result['success'] == true) {
