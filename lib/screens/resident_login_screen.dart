@@ -78,7 +78,16 @@ class _ResidentLoginScreenState extends State<ResidentLoginScreen> {
       
       if (result['success']) {
         print('✅ Server Registration successful!');
-        if (mounted) {
+        
+        // AUTO-LOGIN AFTER REGISTRATION
+        print('🔥 Auto-logging in after registration...');
+        final loginResult = await AuthApiService().signInWithEmailAndPassword(
+          _emailController.text.trim(),
+          _passwordController.text.trim(),
+        );
+        
+        if (loginResult['success'] && mounted) {
+          print('✅ Auto-login successful!');
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (_) => ResidentDashboard(onLogout: (context) async {
@@ -95,12 +104,15 @@ class _ResidentLoginScreenState extends State<ResidentLoginScreen> {
                   MaterialPageRoute(builder: (_) => const SelectionScreen())
                 );
               }
-            }, userData: {
-              'email': _emailController.text.trim(),
-              'full_name': _nameController.text.trim(),
-              'role': 'resident',
             })),
           );
+        } else {
+          print('❌ Auto-login failed: ${loginResult['message']}');
+          if (mounted) {
+            setState(() {
+              _errorMessage = 'Registration successful but login failed. Please try logging in manually.';
+            });
+          }
         }
       } else {
         if (mounted) {
