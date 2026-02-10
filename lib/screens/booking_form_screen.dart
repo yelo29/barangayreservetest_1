@@ -1,20 +1,19 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:intl/intl.dart';
 import 'package:http/http.dart' as http;
-import '../services/data_service.dart';
-import '../services/auth_api_service.dart';
-import '../services/api_service.dart' as api;
-import '../services/api_service.dart';
-import '../config/app_config.dart';
-import '../widgets/loading_widget.dart';
-import '../utils/debug_logger.dart';
-import 'facility_calendar_screen.dart';
+import '../../../services/data_service.dart';
+import '../../../services/auth_api_service.dart';
+import '../../../services/api_service.dart';
+import '../../../services/ban_validation_service.dart';
+import '../../../widgets/loading_widget.dart';
+import '../../../utils/debug_logger.dart';
+import '../../../screens/facility_calendar_screen.dart';
+import '../../../config/app_config.dart';
 
 class BookingFormScreen extends StatefulWidget {
   final Map<String, dynamic> facility;
@@ -186,7 +185,7 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
       final selectedDate = widget.selectedDate.toIso8601String().split('T')[0];
       final availabilityResponse = await http.get(
         Uri.parse('${AppConfig.baseUrl}/api/available-timeslots?facility_id=${widget.facility['id']}&date=$selectedDate'),
-        headers: await api.ApiService.getHeaders(),
+        headers: await ApiService.getHeaders(),
       ).then((response) async {
         final data = json.decode(response.body);
         return {
@@ -694,7 +693,14 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
       return;
     }
     
-    // Note: Ban checking removed - user will implement new approach
+    // 🔒 BAN VALIDATION: Check if user is banned before allowing booking
+    final banValidation = await BanValidationService.validateUserForBooking();
+    if (!banValidation['allowed']) {
+      if (mounted) {
+        BanValidationService.showBanDialog(context, banValidation);
+      }
+      return;
+    }
     
     if (_selectedTimeSlot.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -750,7 +756,7 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
       }
 
       // Submit booking using API service
-      final result = await api.ApiService.createBooking(bookingData);
+      final result = await ApiService.createBooking(bookingData);
       
       if (mounted) {
         if (result['success'] == true) {
