@@ -493,7 +493,7 @@ def create_booking():
         print(f"🔍 DEBUG: Database path: {Config.DATABASE_PATH}")
         
         # Get user_id from email
-        cursor.execute('SELECT id, role FROM users WHERE email = ?', (data['user_email'],))
+        cursor.execute('SELECT id, role, is_banned, ban_reason FROM users WHERE email = ?', (data['user_email'],))
         user_result = cursor.fetchone()
         
         if not user_result:
@@ -501,7 +501,20 @@ def create_booking():
         
         user_id = user_result[0]
         user_role = user_result[1]
-        print(f"🔍 DEBUG: Found user_id: {user_id}, role: {user_role} for email: {data['user_email']}")
+        is_banned = user_result[2]
+        ban_reason = user_result[3]
+        
+        # 🔒 BAN VALIDATION: Check if user is banned
+        if is_banned:
+            print(f"🚨 BANNED USER ATTEMPTED BOOKING: {data['user_email']} - Reason: {ban_reason}")
+            return jsonify({
+                'success': False, 
+                'message': 'Account is banned. Cannot create bookings.',
+                'error_type': 'user_banned',
+                'ban_reason': ban_reason or 'Account has been banned by administrator.'
+            }), 403
+        
+        print(f"🔍 DEBUG: Found user_id: {user_id}, role: {user_role}, banned: {is_banned} for email: {data['user_email']}")
         
         # Check if this is an official booking
         is_official_booking = user_role == 'official'
@@ -1434,6 +1447,36 @@ def get_officials():
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
+@app.route('/api/users/status/<string:email>', methods=['GET'])
+def get_user_status(email):
+    """Get user status including ban information"""
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT id, email, is_banned, ban_reason FROM users WHERE email = ?', (email,))
+        user_result = cursor.fetchone()
+        
+        if not user_result:
+            return jsonify({'success': False, 'message': 'User not found'}), 404
+        
+        user_id, user_email, is_banned, ban_reason = user_result
+        
+        return jsonify({
+            'success': True,
+            'id': user_id,
+            'email': user_email,
+            'is_banned': bool(is_banned),
+            'ban_reason': ban_reason
+        })
+        
+    except Exception as e:
+        print(f"❌ Error getting user status: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+    finally:
+        if 'conn' in locals():
+            conn.close()
+
 # Verification Requests
 @app.route('/api/verification-requests', methods=['GET', 'POST'])
 def verification_requests():
@@ -1501,6 +1544,28 @@ def verification_requests():
             
             conn = get_db_connection()
             cursor = conn.cursor()
+            
+            # 🔒 BAN VALIDATION: Check if user is banned before allowing verification request
+            cursor.execute('SELECT email, is_banned, ban_reason FROM users WHERE id = ?', (data.get('residentId'),))
+            user_result = cursor.fetchone()
+            
+            if not user_result:
+                return jsonify({'success': False, 'message': 'User not found'}), 404
+            
+            user_email = user_result[0]
+            is_banned = user_result[1]
+            ban_reason = user_result[2]
+            
+            if is_banned:
+                print(f"🚨 BANNED USER ATTEMPTED VERIFICATION REQUEST: {user_email} - Reason: {ban_reason}")
+                return jsonify({
+                    'success': False, 
+                    'message': 'Account is banned. Cannot submit verification requests.',
+                    'error_type': 'user_banned',
+                    'ban_reason': ban_reason or 'Account has been banned by administrator.'
+                }), 403
+            
+            print(f"🔍 DEBUG: Verification request for user: {user_email}, banned: {is_banned}")
             
             # Insert new verification request
             cursor.execute('''
