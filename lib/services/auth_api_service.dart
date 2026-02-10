@@ -2,7 +2,9 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_service_updated.dart';
+import 'api_service.dart' as api;
 import '../config/app_config.dart';
+import 'dart:async';
 
 class AuthApiService {
   static final AuthApiService _instance = AuthApiService._internal();
@@ -11,6 +13,7 @@ class AuthApiService {
 
   Map<String, dynamic>? _currentUser;
   bool _isInitialized = false;
+  Timer? _banCheckTimer;
 
   // Initialize user session
   Future<void> initializeUser() async {
@@ -46,6 +49,101 @@ class AuthApiService {
     return _currentUser;
   }
 
+  // Start periodic ban checking
+  void _startBanCheckTimer() {
+    _stopBanCheckTimer(); // Stop any existing timer
+    
+    if (_currentUser != null && _currentUser!['email'] != null) {
+      print('🔍 Starting periodic ban check for user: ${_currentUser!['email']}');
+      
+      _banCheckTimer = Timer.periodic(const Duration(seconds: 30), (timer) async {
+        await _checkUserBanStatus();
+      });
+    }
+  }
+
+  // Stop periodic ban checking
+  void _stopBanCheckTimer() {
+    if (_banCheckTimer != null) {
+      _banCheckTimer!.cancel();
+      _banCheckTimer = null;
+      print('🔍 Stopped periodic ban check');
+    }
+  }
+
+  // Check user ban status periodically
+  Future<void> _checkUserBanStatus() async {
+    if (_currentUser == null || _currentUser!['email'] == null) {
+      return;
+    }
+
+    try {
+      print('🔍 Performing periodic ban check for user: ${_currentUser!['email']}');
+      
+      // Get fresh user profile from server
+      final profileResponse = await api.ApiService.getUserProfile(_currentUser!['email']);
+      
+      if (profileResponse['success'] == true && profileResponse['user'] != null) {
+        final userData = profileResponse['user'];
+        
+        // Check ban status - handle both boolean and integer formats
+        dynamic bannedValue = userData['is_banned'] ?? false;
+        bool isCurrentlyBanned = bannedValue is bool ? bannedValue : (bannedValue == 1 || bannedValue == true);
+        
+        print('🔍 Periodic ban check result:');
+        print('  - User email: ${_currentUser!['email']}');
+        print('  - is_banned value: $bannedValue');
+        print('  - is_banned type: ${bannedValue.runtimeType}');
+        print('  - isCurrentlyBanned: $isCurrentlyBanned');
+        print('  - Previous cached ban status: ${_currentUser!['is_banned']}');
+        
+        // CRITICAL: If user is now banned but wasn't before, force logout
+        if (isCurrentlyBanned && !(_currentUser!['is_banned'] == true)) {
+          print('🚨 USER BANNED DETECTED - FORCING AUTOMATIC LOGOUT');
+          await _forceLogoutForBannedUser(userData['ban_reason'] ?? 'Your account has been banned');
+          return;
+        }
+        
+        // Update local ban status
+        _currentUser!['is_banned'] = isCurrentlyBanned;
+      } else {
+        print('🔍 Failed to fetch user profile for periodic check: ${profileResponse['error']}');
+      }
+    } catch (e) {
+      print('🔍 Error in periodic ban check: $e');
+    }
+  }
+
+  // Force logout for banned user
+  Future<void> _forceLogoutForBannedUser(String banReason) async {
+    print('🚨 FORCING LOGOUT FOR BANNED USER');
+    print('🚨 Ban reason: $banReason');
+    
+    try {
+      // Stop ban check timer
+      _stopBanCheckTimer();
+      
+      // Clear current user
+      _currentUser = null;
+      
+      // Clear local storage
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('auth_token');
+      await prefs.remove('user_email');
+      await prefs.remove('user_id');
+      await prefs.remove('user_name');
+      await prefs.remove('user_role');
+      
+      print('🚨 User data cleared from local storage');
+      
+      // Show ban notification (this would be handled by the app UI)
+      print('🚨 Banned user logged out successfully');
+      
+    } catch (e) {
+      print('🚨 Error during forced logout: $e');
+    }
+  }
+
   // Register user
   Future<Map<String, dynamic>> registerWithEmailAndPassword(
     String name, 
@@ -79,7 +177,13 @@ class AuthApiService {
           return {'success': false, 'message': data['message'] ?? 'Registration failed'};
         }
       } else {
-        return {'success': false, 'message': 'Server error: ${response.statusCode}'};
+        // For non-200 status codes, try to parse error message from response body
+        try {
+          final errorData = json.decode(response.body);
+          return {'success': false, 'message': errorData['message'] ?? 'Server error: ${response.statusCode}'};
+        } catch (e) {
+          return {'success': false, 'message': 'Server error: ${response.statusCode}'};
+        }
       }
     } catch (e) {
       print('❌ Registration exception: $e');
@@ -156,6 +260,9 @@ class AuthApiService {
         print('🔍 AuthApiService: Boolean conversion completed');
         
         _currentUser = user;
+        
+        // Start periodic ban checking for logged-in user
+        _startBanCheckTimer();
         
         // Save user data to SharedPreferences
         final prefs = await SharedPreferences.getInstance();
@@ -251,6 +358,10 @@ class AuthApiService {
         
         _currentUser = user;
         print('✅ User restored successfully');
+        
+        // Start periodic ban checking for restored user
+        _startBanCheckTimer();
+        
         return _currentUser;
       } else {
         print('❌ Failed to restore user: ${result['error']}');
@@ -392,7 +503,13 @@ class AuthApiService {
           return {'success': false, 'message': data['message'] ?? 'Update failed'};
         }
       } else {
-        return {'success': false, 'message': 'Server error: ${response.statusCode}'};
+        // For non-200 status codes, try to parse error message from response body
+        try {
+          final errorData = json.decode(response.body);
+          return {'success': false, 'message': errorData['message'] ?? 'Server error: ${response.statusCode}'};
+        } catch (e) {
+          return {'success': false, 'message': 'Server error: ${response.statusCode}'};
+        }
       }
     } catch (e) {
       print('❌ Update user profile exception: $e');
@@ -408,6 +525,7 @@ class AuthApiService {
       final result = await ApiService.logout();
       
       // Clear local data
+      _stopBanCheckTimer(); // Stop periodic ban checking
       _currentUser = null;
       _isInitialized = false;
       
@@ -426,6 +544,7 @@ class AuthApiService {
   Future<void> clearUserData() async {
     try {
       await ApiService.clearUserData();
+      _stopBanCheckTimer(); // Stop periodic ban checking
       _currentUser = null;
       _isInitialized = false;
       print('🔍 Cleared all user data');
