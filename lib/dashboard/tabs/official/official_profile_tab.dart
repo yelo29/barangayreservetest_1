@@ -43,6 +43,12 @@ class _OfficialProfileTabState extends State<OfficialProfileTab> {
     }
   }
 
+  // Refresh data method
+  Future<void> _refreshData() async {
+    // Reload official data
+    await _loadOfficialData();
+  }
+
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
@@ -50,12 +56,23 @@ class _OfficialProfileTabState extends State<OfficialProfileTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Account Settings',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-            ),
+          Row(
+            children: [
+              const Text(
+                'Account Settings',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const Spacer(),
+              // Refresh button
+              IconButton(
+                onPressed: _refreshData,
+                icon: const Icon(Icons.refresh),
+                tooltip: 'Refresh',
+              ),
+            ],
           ),
           const SizedBox(height: 24),
           // Profile Header

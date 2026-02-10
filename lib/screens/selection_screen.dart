@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import '../dashboard/widgets/option_card.dart';
 import '../services/permission_service.dart';
+import '../services/ban_detection_service.dart';
 import 'resident_login_screen.dart';
 import 'official_login_screen.dart';
 import '../config/app_config.dart';
 
 class SelectionScreen extends StatefulWidget {
-  const SelectionScreen({super.key});
+  final GlobalKey<NavigatorState>? navigatorKey;
+  
+  const SelectionScreen({super.key, this.navigatorKey});
 
   @override
   State<SelectionScreen> createState() => _SelectionScreenState();
@@ -16,6 +19,12 @@ class _SelectionScreenState extends State<SelectionScreen> {
   @override
   void initState() {
     super.initState();
+    
+    // Set navigator key for ban detection service
+    if (widget.navigatorKey != null) {
+      BanDetectionService.setNavigatorKey(widget.navigatorKey!);
+    }
+    
     _requestPermissions();
   }
 

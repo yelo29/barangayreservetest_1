@@ -66,6 +66,7 @@ class _OfficialBookingRequestsTabState extends State<OfficialBookingRequestsTab>
         final data = json.decode(response.body);
         if (data['success'] == true && data['user'] != null) {
           DebugLogger.ui('Successfully fetched user profile for $userEmail');
+          DebugLogger.ui('🔍 Profile data: ${data['user']}'); // Added debug
           return data['user'];
         }
       }
@@ -79,7 +80,9 @@ class _OfficialBookingRequestsTabState extends State<OfficialBookingRequestsTab>
           'email': userEmail,
           'discount_rate': 0.1,
           'verified': true,
-          'role': 'resident'
+          'role': 'resident',
+          'fake_booking_violations': 3, // Updated: User now has 3 violations
+          'is_banned': 1 // Updated: User is now banned (use integer to match DB)
         };
       } else if (userEmail == 'saloestillopez@gmail.com') {
         DebugLogger.ui('Using fallback for saloestillopez@gmail.com - 5% discount');
@@ -87,7 +90,9 @@ class _OfficialBookingRequestsTabState extends State<OfficialBookingRequestsTab>
           'email': userEmail,
           'discount_rate': 0.05, // 5% for non-resident
           'verified': true,
-          'role': 'resident'
+          'role': 'resident',
+          'fake_booking_violations': 0,
+          'is_banned': 0 // Use integer to match DB
         };
       } else if (userEmail == 'resident01@gmail.com') {
         DebugLogger.ui('Using fallback for resident01@gmail.com - 0% discount');
@@ -95,7 +100,9 @@ class _OfficialBookingRequestsTabState extends State<OfficialBookingRequestsTab>
           'email': userEmail,
           'discount_rate': 0.0, // 0% for unverified
           'verified': false,
-          'role': 'resident'
+          'role': 'resident',
+          'fake_booking_violations': 0,
+          'is_banned': 0 // Use integer to match DB
         };
       }
       
@@ -105,7 +112,9 @@ class _OfficialBookingRequestsTabState extends State<OfficialBookingRequestsTab>
         'email': userEmail,
         'discount_rate': 0.0,
         'verified': false,
-        'role': 'resident'
+        'role': 'resident',
+        'fake_booking_violations': 0,
+        'is_banned': 0 // Use integer to match DB
       };
     } catch (e) {
       DebugLogger.error('Failed to fetch user profile: $e');
@@ -116,7 +125,9 @@ class _OfficialBookingRequestsTabState extends State<OfficialBookingRequestsTab>
           'email': userEmail,
           'discount_rate': 0.1,
           'verified': true,
-          'role': 'resident'
+          'role': 'resident',
+          'fake_booking_violations': 3, // Updated: User now has 3 violations
+          'is_banned': 1 // Updated: User is now banned (use integer to match DB)
         };
       } else if (userEmail == 'saloestillopez@gmail.com') {
         DebugLogger.ui('Using catch fallback for saloestillopez@gmail.com - 5% discount');
@@ -124,7 +135,9 @@ class _OfficialBookingRequestsTabState extends State<OfficialBookingRequestsTab>
           'email': userEmail,
           'discount_rate': 0.05, // 5% for non-resident
           'verified': true,
-          'role': 'resident'
+          'role': 'resident',
+          'fake_booking_violations': 0,
+          'is_banned': 0 // Use integer to match DB
         };
       } else if (userEmail == 'resident01@gmail.com') {
         DebugLogger.ui('Using catch fallback for resident01@gmail.com - 0% discount');
@@ -132,7 +145,9 @@ class _OfficialBookingRequestsTabState extends State<OfficialBookingRequestsTab>
           'email': userEmail,
           'discount_rate': 0.0, // 0% for unverified
           'verified': false,
-          'role': 'resident'
+          'role': 'resident',
+          'fake_booking_violations': 0,
+          'is_banned': 0 // Use integer to match DB
         };
       }
       DebugLogger.ui('No catch fallback found for $userEmail - returning null');
@@ -213,32 +228,104 @@ class _OfficialBookingRequestsTabState extends State<OfficialBookingRequestsTab>
   }
 
   Future<void> _rejectBooking(String bookingId) async {
-    try {
-      final result = await api_service.ApiService.updateBookingStatus(int.parse(bookingId), 'rejected');
-      
-      if (result['success']) {
-        _loadPendingBookings(); // Refresh the list
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Booking rejected successfully!'),
-            backgroundColor: Colors.orange,
+    // Show rejection reason dialog
+    final result = await showDialog<String>(
+      context: context,
+      builder: (BuildContext context) {
+        String selectedReason = 'incorrect_downpayment';
+        
+        return AlertDialog(
+          title: const Text('Rejection Reason'),
+          content: StatefulBuilder(
+            builder: (BuildContext context, StateSetter setState) {
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Please select the reason for rejection:'),
+                  const SizedBox(height: 16),
+                  RadioListTile<String>(
+                    title: const Text('Rejected (because of incorrect amount of downpayment)'),
+                    value: 'incorrect_downpayment',
+                    groupValue: selectedReason,
+                    onChanged: (String? value) {
+                      setState(() {
+                        selectedReason = value!;
+                      });
+                    },
+                  ),
+                  RadioListTile<String>(
+                    title: const Text('Rejected (because of fake receipt/no downpayment/payment)'),
+                    value: 'fake_receipt',
+                    groupValue: selectedReason,
+                    onChanged: (String? value) {
+                      setState(() {
+                        selectedReason = value!;
+                      });
+                    },
+                  ),
+                ],
+              );
+            },
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('CANCEL'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(selectedReason),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              child: const Text('REJECT'),
+            ),
+          ],
         );
-      } else {
+      },
+    );
+    
+    // If user selected a reason, proceed with rejection
+    if (result != null) {
+      try {
+        String rejectionReason = '';
+        String rejectionType = result;
+        
+        // Set appropriate rejection message based on type
+        if (rejectionType == 'incorrect_downpayment') {
+          rejectionReason = 'The amount of your down payment is incorrect, please pay appropriate amount next time';
+        } else if (rejectionType == 'fake_receipt') {
+          rejectionReason = 'Your payment receipt is fake or shown no payment in our payment history/records, ⚠️ know that this violation will be recorded and you will only have three chances before getting your account banned!';
+        }
+        
+        final apiResult = await api_service.ApiService.updateBookingStatus(
+          int.parse(bookingId), 
+          'rejected', 
+          rejectionReason: rejectionReason,
+          rejectionType: rejectionType
+        );
+        
+        if (apiResult['success']) {
+          _loadPendingBookings(); // Refresh the list
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Booking rejected successfully!'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(apiResult['message'] ?? 'Failed to reject booking'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(result['message'] ?? 'Failed to reject booking'),
+            content: Text('Error rejecting booking: $e'),
             backgroundColor: Colors.red,
           ),
         );
       }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error rejecting booking: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
     }
   }
 
@@ -305,6 +392,23 @@ class _OfficialBookingRequestsTabState extends State<OfficialBookingRequestsTab>
     );
   }
 
+  // Refresh data method
+  Future<void> _refreshData() async {
+    setState(() {
+      _isLoading = true;
+    });
+    
+    // Clear user profiles cache and reload data
+    _userProfiles.clear();
+    await _loadPendingBookings();
+    
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -313,10 +417,21 @@ class _OfficialBookingRequestsTabState extends State<OfficialBookingRequestsTab>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Booking Requests',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
+            Row(
+            children: [
+              const Text(
+                'Booking Requests',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              ),
+              const Spacer(),
+              // Refresh button
+              IconButton(
+                onPressed: _refreshData,
+                icon: const Icon(Icons.refresh),
+                tooltip: 'Refresh',
+              ),
+            ],
+          ),
             const SizedBox(height: 20),
             if (_isLoading)
               const Center(child: CircularProgressIndicator())
@@ -576,7 +691,10 @@ class _OfficialBookingRequestsTabState extends State<OfficialBookingRequestsTab>
     String discountType = 'No Discount';
     Color tagColor = Colors.grey;
     
-    DebugLogger.ui('Building discount tag for user: ${booking['user_email']}');
+    // Get user email from booking data
+    String userEmail = booking['user_email'] ?? 'unknown';
+    
+    DebugLogger.ui('Building discount tag for user: $userEmail');
     DebugLogger.ui('Booking discount_rate: ${booking['discount_rate']}');
     DebugLogger.ui('User profile discount_rate: ${userProfile?['discount_rate']}');
     
@@ -605,32 +723,81 @@ class _OfficialBookingRequestsTabState extends State<OfficialBookingRequestsTab>
     
     DebugLogger.ui('Final discount type: $discountType');
     
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: tagColor.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: tagColor.withOpacity(0.3)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.local_offer,
-            size: 14,
-            color: tagColor,
+    // NEW: Check for violations
+    int violations = userProfile?['fake_booking_violations'] ?? 0;
+    // Handle both integer and boolean types for is_banned
+    dynamic bannedValue = userProfile?['is_banned'] ?? false;
+    bool isBanned = bannedValue is bool ? bannedValue : (bannedValue == 1 || bannedValue == true);
+    
+    DebugLogger.ui('🔍 VIOLATION DEBUG: User=$userEmail, Violations=$violations, IsBanned=$isBanned'); // Added debug
+    DebugLogger.ui('🔍 VIOLATION DEBUG: UserProfile=$userProfile'); // Added debug
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Discount tag
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: tagColor.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: tagColor.withOpacity(0.3)),
           ),
-          const SizedBox(width: 4),
-          Text(
-            discountType,
-            style: TextStyle(
-              fontSize: 11,
-              color: tagColor,
-              fontWeight: FontWeight.w600,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.local_offer,
+                size: 14,
+                color: tagColor,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                discountType,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: tagColor,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+        
+        // NEW: Violation warning
+        if (violations > 0 || isBanned) ...[
+          const SizedBox(height: 4),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: isBanned ? Colors.red.withOpacity(0.1) : Colors.orange.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isBanned ? Colors.red.withOpacity(0.3) : Colors.orange.withOpacity(0.3),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  isBanned ? Icons.block : Icons.warning,
+                  size: 14,
+                  color: isBanned ? Colors.red : Colors.orange,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  isBanned ? 'BANNED' : '$violations/3 VIOLATIONS',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: isBanned ? Colors.red : Colors.orange,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
-      ),
+      ],
     );
   }
 }

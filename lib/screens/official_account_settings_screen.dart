@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/auth_api_service.dart';
+import '../services/api_service.dart';
 
 class OfficialAccountSettingsScreen extends StatefulWidget {
   const OfficialAccountSettingsScreen({super.key});
@@ -63,20 +64,35 @@ class _OfficialAccountSettingsScreenState extends State<OfficialAccountSettingsS
         throw Exception('No user logged in');
       }
 
-      // Update local AuthApiService data directly (no need for server call - already synced)
-      final authApiService = AuthApiService();
-      await authApiService.updateCurrentUser({
+      // Call server API to update profile
+      final profileData = {
+        'email': _currentUserEmail,
         'full_name': _nameController.text.trim(),
         'contact_number': _contactController.text.trim(),
-      });
+      };
+
+      print('🔍 Updating profile on server: $profileData');
       
-      // Refresh user data after successful update
-      await _loadUserData();
+      final result = await ApiService.updateProfile(profileData);
       
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Profile updated successfully!')),
-        );
+      if (result['success'] == true) {
+        // Update local AuthApiService data after successful server update
+        final authApiService = AuthApiService();
+        await authApiService.updateCurrentUser({
+          'full_name': _nameController.text.trim(),
+          'contact_number': _contactController.text.trim(),
+        });
+        
+        // Refresh user data after successful update
+        await _loadUserData();
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Profile updated successfully!')),
+          );
+        }
+      } else {
+        throw Exception(result['message'] ?? 'Failed to update profile');
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(

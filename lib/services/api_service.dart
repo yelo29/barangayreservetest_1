@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'base64_image_service.dart';
 import '../config/app_config.dart';
+import 'ban_detection_service.dart';
 
 class ApiService {
   // Dynamic server URL - works with Python Flask server
@@ -148,7 +149,13 @@ class ApiService {
         }
       } else {
         print('🔍 HTTP error: ${response.statusCode}');
-        return {'success': false, 'message': 'Server error: ${response.statusCode}'};
+        // For non-200 status codes, try to parse error message from response body
+        try {
+          final errorData = json.decode(response.body);
+          return {'success': false, 'message': errorData['message'] ?? 'Server error: ${response.statusCode}'};
+        } catch (e) {
+          return {'success': false, 'message': 'Server error: ${response.statusCode}'};
+        }
       }
     } catch (e) {
       print('❌ ApiService.login exception: $e');
@@ -197,11 +204,7 @@ class ApiService {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        if (data['success'] == true) {
-          return data;
-        } else {
-          return {'success': false, 'error': data['error'] ?? 'Failed to get facilities'};
-        }
+        return await _handleApiResponse(data, 'getFacilities');
       } else {
         return {'success': false, 'error': 'HTTP ${response.statusCode}'};
       }
@@ -277,11 +280,9 @@ class ApiService {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        if (data['success'] == true) {
-          return data;
-        } else {
-          return {'success': false, 'error': data['error'] ?? 'Failed to create booking'};
-        }
+        
+        // Handle response and check for ban status
+        return await _handleApiResponse(data, 'createBooking');
       } else {
         return {'success': false, 'error': 'HTTP ${response.statusCode}'};
       }
@@ -292,7 +293,7 @@ class ApiService {
   }
 
   // Update booking status
-  static Future<Map<String, dynamic>> updateBookingStatus(int bookingId, String status, {String? rejectionReason}) async {
+  static Future<Map<String, dynamic>> updateBookingStatus(int bookingId, String status, {String? rejectionReason, String? rejectionType}) async {
     try {
       Map<String, dynamic> updateData = {
         'status': status,
@@ -300,6 +301,10 @@ class ApiService {
       
       if (rejectionReason != null) {
         updateData['rejection_reason'] = rejectionReason;
+      }
+      
+      if (rejectionType != null) {
+        updateData['rejection_type'] = rejectionType;
       }
       
       final response = await http.put(
@@ -521,7 +526,13 @@ class ApiService {
         print('🔍 Parsed response data: $data');
         return data;
       } else {
-        return {'success': false, 'message': 'Server error: ${response.statusCode}'};
+        // For non-200 status codes, try to parse error message from response body
+        try {
+          final errorData = json.decode(response.body);
+          return {'success': false, 'message': errorData['message'] ?? 'Server error: ${response.statusCode}'};
+        } catch (e) {
+          return {'success': false, 'message': 'Server error: ${response.statusCode}'};
+        }
       }
     } catch (e) {
       print('❌ Registration exception: $e');
@@ -695,5 +706,32 @@ class ApiService {
       print('❌ regenerateFacilityTimeSlots error: $e');
       return {'success': false, 'message': e.toString()};
     }
+  }
+
+  /// Handle API response and check for ban status
+  static Future<Map<String, dynamic>> _handleApiResponse(
+    Map<String, dynamic> response, 
+    String operation
+  ) async {
+    // Check if response indicates user is banned
+    if (response['success'] == false) {
+      final message = response['message']?.toString().toLowerCase() ?? '';
+      
+      if (message.contains('banned') || message.contains('permanently banned')) {
+        print('🚨 ApiService: User banned detected in $operation response');
+        print('🚨 Ban message: ${response['message']}');
+        
+        // Trigger automatic logout for banned user
+        await BanDetectionService.checkAndHandleBanStatus();
+        
+        return {
+          ...response,
+          'user_banned': true,
+          'auto_logout_triggered': true
+        };
+      }
+    }
+    
+    return response;
   }
 }

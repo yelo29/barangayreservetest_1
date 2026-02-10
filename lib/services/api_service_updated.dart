@@ -107,7 +107,13 @@ class ApiService {
           return {'success': false, 'message': data['message'] ?? 'Login failed'};
         }
       } else {
-        return {'success': false, 'message': 'Server error: ${response.statusCode}'};
+        // For non-200 status codes, try to parse error message from response body
+        try {
+          final errorData = json.decode(response.body);
+          return {'success': false, 'message': errorData['message'] ?? 'Server error: ${response.statusCode}'};
+        } catch (e) {
+          return {'success': false, 'message': 'Server error: ${response.statusCode}'};
+        }
       }
     } catch (e) {
       print('❌ ApiService.login exception: $e');
@@ -285,7 +291,7 @@ class ApiService {
   }
 
   // Update booking status
-  static Future<Map<String, dynamic>> updateBookingStatus(int bookingId, String status, {String? rejectionReason}) async {
+  static Future<Map<String, dynamic>> updateBookingStatus(int bookingId, String status, {String? rejectionReason, String? rejectionType}) async {
     try {
       Map<String, dynamic> updateData = {
         'status': status,
@@ -293,6 +299,10 @@ class ApiService {
       
       if (rejectionReason != null) {
         updateData['rejection_reason'] = rejectionReason;
+      }
+      
+      if (rejectionType != null) {
+        updateData['rejection_type'] = rejectionType;
       }
       
       final response = await http.put(

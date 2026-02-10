@@ -413,13 +413,59 @@ class _ResidentBookingsTabState extends State<ResidentBookingsTab> {
                       ],
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      booking['rejection_reason'] ?? 'This date has been booked by Officials, refund of your payments will be done shortly, check your email or SMS for further details.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.red.shade600,
+                    
+                    // NEW: Check if rejection reason contains violation warning (fake receipt only)
+                    if (booking['rejection_reason'] != null && 
+                        booking['rejection_reason'].toString().contains('violation will be recorded')) 
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.warning,
+                                  size: 16,
+                                  color: Colors.orange,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'VIOLATION WARNING',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.orange,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              booking['rejection_reason'] ?? 'This date has been Rejected by Officials due to fake Reciept or Wrong downpayment given.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.red.shade600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    else
+                      Text(
+                        booking['rejection_reason'] ?? 'This date has been Rejected by Officials due to fake Reciept or Wrong downpayment given.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.red.shade600,
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),
