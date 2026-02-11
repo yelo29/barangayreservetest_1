@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../services/data_service.dart';
 import '../../../services/auth_api_service.dart';
-import '../../../services/api_service.dart' as api_service;
 import '../../../widgets/loading_widget.dart';
 import '../../../utils/debug_logger.dart';
 import '../../../widgets/facility_icon.dart';
@@ -777,7 +776,7 @@ class _OfficialHomeTabState extends State<OfficialHomeTab> {
 
       try {
         // Use DataService.deleteFacility to actually delete the facility
-        final result = await api_service.ApiService.deleteFacility(facility['id'].toString());
+        final result = await DataService.deleteFacility(facility['id'].toString());
         
         // Close loading dialog
         Navigator.pop(context);
@@ -865,7 +864,7 @@ class _OfficialHomeTabState extends State<OfficialHomeTab> {
 
       try {
         // Call API to regenerate time slots
-        final result = await api_service.ApiService.regenerateFacilityTimeSlots(facility['id'].toString());
+        final result = await DataService.regenerateFacilityTimeSlots(facility['id'].toString());
         
         // Close loading dialog
         Navigator.pop(context);

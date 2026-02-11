@@ -254,6 +254,193 @@ class DataService {
     }
   }
   
+  // Update booking status (for officials)
+  static Future<Map<String, dynamic>> updateBookingStatus(
+    int bookingId, 
+    String status, {
+    String? rejectionReason,
+    String? rejectionType
+  }) async {
+    try {
+      final Map<String, dynamic> updateData = {
+        'status': status,
+        if (rejectionReason != null) 'rejection_reason': rejectionReason,
+        if (rejectionType != null) 'rejection_type': rejectionType,
+      };
+      
+      final response = await http.put(
+        Uri.parse('${AppConfig.baseUrl}/api/bookings/$bookingId/status'),
+        headers: await getHeaders(),
+        body: json.encode(updateData),
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return {
+          'success': true,
+          'message': data['message'] ?? 'Booking status updated successfully',
+          'data': data,
+        };
+      } else {
+        return {'success': false, 'error': 'HTTP ${response.statusCode}'};
+      }
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+  
+  // Create facility (for officials)
+  static Future<Map<String, dynamic>> createFacility(Map<String, dynamic> facilityData) async {
+    try {
+      final response = await http.post(
+        Uri.parse('${AppConfig.baseUrl}/api/facilities'),
+        headers: await getHeaders(),
+        body: json.encode(facilityData),
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return {
+          'success': true,
+          'message': data['message'] ?? 'Facility created successfully',
+          'data': data,
+        };
+      } else {
+        return {'success': false, 'error': 'HTTP ${response.statusCode}'};
+      }
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+  
+  // Update facility (for officials)
+  static Future<Map<String, dynamic>> updateFacility(
+    String facilityId, 
+    Map<String, dynamic> facilityData
+  ) async {
+    try {
+      final response = await http.put(
+        Uri.parse('${AppConfig.baseUrl}/api/facilities/$facilityId'),
+        headers: await getHeaders(),
+        body: json.encode(facilityData),
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return {
+          'success': true,
+          'message': data['message'] ?? 'Facility updated successfully',
+          'data': data,
+        };
+      } else {
+        return {'success': false, 'error': 'HTTP ${response.statusCode}'};
+      }
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+  
+  // Delete facility (for officials)
+  static Future<Map<String, dynamic>> deleteFacility(String facilityId) async {
+    try {
+      final response = await http.delete(
+        Uri.parse('${AppConfig.baseUrl}/api/facilities/$facilityId'),
+        headers: await getHeaders(),
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return {
+          'success': true,
+          'message': data['message'] ?? 'Facility deleted successfully',
+          'data': data,
+        };
+      } else {
+        return {'success': false, 'error': 'HTTP ${response.statusCode}'};
+      }
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+  
+  // Update verification status (for officials)
+  static Future<Map<String, dynamic>> updateVerificationStatus(
+    String requestId, 
+    String status, {
+    String? discountRate
+  }) async {
+    try {
+      final Map<String, dynamic> updateData = {
+        'status': status,
+        if (discountRate != null) 'discount_rate': discountRate,
+      };
+      
+      final response = await http.put(
+        Uri.parse('${AppConfig.baseUrl}/api/verification-requests/$requestId'),
+        headers: await getHeaders(),
+        body: json.encode(updateData),
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return {
+          'success': true,
+          'message': data['message'] ?? 'Verification status updated successfully',
+          'data': data,
+        };
+      } else {
+        return {'success': false, 'error': 'HTTP ${response.statusCode}'};
+      }
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+  
+  // Get verification requests (for officials)
+  static Future<Map<String, dynamic>> getVerificationRequests() async {
+    try {
+      final response = await http.get(
+        Uri.parse('${AppConfig.baseUrl}/api/verification-requests'),
+        headers: await getHeaders(),
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return {
+          'success': true,
+          'data': data,
+        };
+      } else {
+        return {'success': false, 'error': 'HTTP ${response.statusCode}'};
+      }
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+  
+  // Regenerate facility time slots (for officials)
+  static Future<Map<String, dynamic>> regenerateFacilityTimeSlots(String facilityId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('${AppConfig.baseUrl}/api/facilities/$facilityId/regenerate-timeslots'),
+        headers: await getHeaders(),
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return {
+          'success': true,
+          'message': data['message'] ?? 'Time slots regenerated successfully',
+          'data': data,
+        };
+      } else {
+        return {'success': false, 'error': 'HTTP ${response.statusCode}'};
+      }
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+  
   // Fetch officials list
   static Future<Map<String, dynamic>> fetchOfficials() async {
     try {

@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:intl/intl.dart';
-import '../../../services/api_service_updated.dart' as api_service;
-import '../../../services/base64_image_service.dart';
+import '../../../services/data_service.dart';
+import '../../../services/auth_api_service.dart';
 
 class OfficialAuthenticationTab extends StatefulWidget {
   final Map<String, dynamic>? userData;
@@ -29,7 +29,7 @@ class _OfficialAuthenticationTabState extends State<OfficialAuthenticationTab> {
 
   Future<void> _loadVerificationRequests() async {
     try {
-      final response = await api_service.ApiService.getVerificationRequests();
+      final response = await DataService.getVerificationRequests();
 
       setState(() {
         if (response['success'] == true) {
@@ -606,7 +606,7 @@ class _OfficialAuthenticationTabState extends State<OfficialAuthenticationTab> {
         }
       }
       
-      final response = await api_service.ApiService.updateVerificationStatus(requestId, status, discountRate: discountRate?.toString());
+      final response = await DataService.updateVerificationStatus(requestId, status, discountRate: discountRate?.toString());
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
