@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../../services/data_service.dart';
-import '../../../services/api_service_updated.dart' as api_service;
 import '../../../services/auth_api_service.dart';
 import '../../../widgets/loading_widget.dart';
 import '../../../utils/debug_logger.dart';
@@ -199,7 +198,8 @@ class _OfficialBookingRequestsTabState extends State<OfficialBookingRequestsTab>
 
   Future<void> _approveBooking(String bookingId) async {
     try {
-      final result = await api_service.ApiService.updateBookingStatus(int.parse(bookingId), 'approved');
+      // Use DataService to update booking status
+      final result = await DataService.updateBookingStatus(int.parse(bookingId), 'approved');
       
       if (result['success']) {
         _loadPendingBookings(); // Refresh the list
@@ -295,7 +295,7 @@ class _OfficialBookingRequestsTabState extends State<OfficialBookingRequestsTab>
           rejectionReason = 'Your payment receipt is fake or shown no payment in our payment history/records, ⚠️ know that this violation will be recorded and you will only have three chances before getting your account banned!';
         }
         
-        final apiResult = await api_service.ApiService.updateBookingStatus(
+        final apiResult = await DataService.updateBookingStatus(
           int.parse(bookingId), 
           'rejected', 
           rejectionReason: rejectionReason,

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../services/api_service.dart';
+import '../../../services/data_service.dart';
 import '../../../services/auth_api_service.dart';
 import '../../../utils/debug_logger.dart';
 import '../../../widgets/facility_icon.dart';
@@ -168,7 +168,7 @@ class _FacilityEditScreenState extends State<FacilityEditScreen> {
           // Create new facility via server
           print('📝 Creating new facility via server');
           facilityData['createdAt'] = DateTime.now().toIso8601String();
-          final result = await ApiService.createFacility(facilityData);
+          final result = await DataService.createFacility(facilityData);
           print('📡 Create facility result: $result');
           success = result['success'] ?? false;
           successMessage = success
@@ -178,7 +178,7 @@ class _FacilityEditScreenState extends State<FacilityEditScreen> {
           // Update facility via server
           print('📝 Updating facility ${widget.facility!['id']} via server');
           facilityData['updatedAt'] = DateTime.now().toIso8601String();
-          final result = await ApiService.updateFacility(
+          final result = await DataService.updateFacility(
             widget.facility!['id'].toString(),
             facilityData,
           );
@@ -193,14 +193,14 @@ class _FacilityEditScreenState extends State<FacilityEditScreen> {
         // Always use server API
         if (widget.facility == null || widget.facility!['id'] == null) {
           facilityData['createdAt'] = DateTime.now().toIso8601String();
-          final result = await ApiService.createFacility(facilityData);
+          final result = await DataService.createFacility(facilityData);
           success = result['success'];
           successMessage = result['success']
               ? 'Facility created successfully!'
               : result['message'] ?? 'Failed to create facility';
         } else {
           facilityData['updatedAt'] = DateTime.now().toIso8601String();
-          final result = await ApiService.updateFacility(
+          final result = await DataService.updateFacility(
             widget.facility!['id'].toString(),
             facilityData,
           );
