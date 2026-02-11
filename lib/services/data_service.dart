@@ -245,7 +245,7 @@ class DataService {
       
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        return {'success': true, 'data': data};
+        return data; // Return the API response directly
       } else {
         return {'success': false, 'error': 'HTTP ${response.statusCode}'};
       }

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../../services/data_service.dart';
 import '../../../services/auth_api_service.dart';
+import '../../../config/app_config.dart';
 import '../../../widgets/loading_widget.dart';
 import '../../../utils/debug_logger.dart';
 import '../../../screens/booking_detail_screen.dart';
@@ -57,7 +58,7 @@ class _OfficialBookingRequestsTabState extends State<OfficialBookingRequestsTab>
       // From the logs, we can see GET /api/users/profile/leo052904@gmail.com works
       final headers = await DataService.getHeaders();
       final response = await http.get(
-        Uri.parse('${api_service.ApiService.baseUrl}/api/users/profile/$userEmail'),
+        Uri.parse('${AppConfig.baseUrl}/api/users/profile/$userEmail'),
         headers: headers,
       );
       

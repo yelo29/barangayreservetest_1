@@ -33,35 +33,24 @@ class _OfficialAuthenticationTabState extends State<OfficialAuthenticationTab> {
 
       setState(() {
         if (response['success'] == true) {
-          // Server returns data in 'data' field with proper field names
-          _verificationRequests = List<Map<String, dynamic>>.from(response['data'] ?? []);
-          
-          // Count by status for debugging
-          final pendingCount = _verificationRequests.where((r) => r['status'] == 'pending').length;
-          final approvedCount = _verificationRequests.where((r) => r['status'] == 'approved').length;
-          final rejectedCount = _verificationRequests.where((r) => r['status'] == 'rejected').length;
-          print('🔍 Status counts: Pending: $pendingCount, Approved: $approvedCount, Rejected: $rejectedCount');
-          
-          // Normalize field names for consistency
-          _verificationRequests = _verificationRequests.map((request) {
-            final normalized = {
-              'id': request['id'],
-              'user_id': request['residentId'] ?? request['user_id'],
-              'verification_type': request['verificationType'] ?? request['verification_type'],
-              'requested_discount_rate': request['discountRate'] ?? request['requested_discount_rate'],
-              'user_photo_base64': request['userPhotoUrl'] ?? request['user_photo_base64'],
-              'valid_id_base64': request['validIdUrl'] ?? request['valid_id_base64'],
-              'status': request['status'],
-              'residential_address': request['address'] ?? request['residential_address'],
-              'created_at': request['submittedAt'] ?? request['created_at'],
-              'email': request['email'],
-              'full_name': request['fullName'] ?? request['full_name'],
-              'contact_number': request['contactNumber'] ?? request['contact_number'],
-            };
-            return normalized;
-          }).toList();
+          // Handle both list and single object responses
+          final responseData = response['data'];
+          if (responseData == null) {
+            _verificationRequests = [];
+          } else if (responseData is List) {
+            _verificationRequests = List<Map<String, dynamic>>.from(responseData);
+          } else if (responseData is Map) {
+            // Check if this map has a 'data' field that contains the actual list
+            if (responseData.containsKey('data') && responseData['data'] is List) {
+              _verificationRequests = List<Map<String, dynamic>>.from(responseData['data']);
+            } else {
+              // Single object case, wrap it in a list
+              _verificationRequests = [Map<String, dynamic>.from(responseData)];
+            }
+          } else {
+            _verificationRequests = [];
+          }
           _filteredRequests = _verificationRequests;
-          print('🔍 Loaded ${_verificationRequests.length} verification requests');
         } else {
           _verificationRequests = [];
           _filteredRequests = [];
@@ -69,7 +58,6 @@ class _OfficialAuthenticationTabState extends State<OfficialAuthenticationTab> {
         _isLoading = false;
       });
     } catch (e) {
-      print('Error loading verification requests: $e');
       setState(() {
         _verificationRequests = [];
         _filteredRequests = [];
@@ -379,7 +367,7 @@ class _OfficialAuthenticationTabState extends State<OfficialAuthenticationTab> {
                     children: [
                       Expanded(
                         child: ElevatedButton.icon(
-                          onPressed: () => _updateVerificationStatus(request['id'], 'rejected'),
+                          onPressed: request['id'] != null ? () => _updateVerificationStatus(request['id'], 'rejected') : null,
                           icon: const Icon(Icons.close),
                           label: const Text('Reject'),
                           style: ElevatedButton.styleFrom(
@@ -392,7 +380,7 @@ class _OfficialAuthenticationTabState extends State<OfficialAuthenticationTab> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: ElevatedButton.icon(
-                          onPressed: () => _updateVerificationStatus(request['id'], 'approved'),
+                          onPressed: request['id'] != null ? () => _updateVerificationStatus(request['id'], 'approved') : null,
                           icon: const Icon(Icons.check),
                           label: const Text('Approve'),
                           style: ElevatedButton.styleFrom(
@@ -432,7 +420,7 @@ class _OfficialAuthenticationTabState extends State<OfficialAuthenticationTab> {
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
               child: Image.memory(
-                base64.decode(Base64ImageService.extractBase64(imageUrl) ?? ''),
+                base64.decode(imageUrl.startsWith('data:') ? imageUrl.split(',')[1] : imageUrl),
                 fit: BoxFit.cover,
                 width: double.infinity,
                 height: double.infinity,
@@ -606,7 +594,7 @@ class _OfficialAuthenticationTabState extends State<OfficialAuthenticationTab> {
         }
       }
       
-      final response = await DataService.updateVerificationStatus(requestId, status, discountRate: discountRate?.toString());
+      final response = await DataService.updateVerificationStatus(requestId.toString(), status, discountRate: discountRate?.toString());
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -721,7 +709,7 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
     ImageProvider imageProvider;
     
     try {
-      final cleanBase64 = Base64ImageService.extractBase64(widget.base64Image);
+      final cleanBase64 = widget.base64Image.startsWith('data:') ? widget.base64Image.split(',')[1] : widget.base64Image;
       if (cleanBase64 == null || cleanBase64.isEmpty) {
         throw Exception('Invalid base64 data');
       }

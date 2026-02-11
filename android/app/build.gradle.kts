@@ -8,7 +8,7 @@ plugins {
 
 android {
     namespace = "ph.barangay.reserve"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 36  // Updated to satisfy plugin requirements
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -25,8 +25,8 @@ android {
         applicationId = "ph.barangay.reserve"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
+        minSdk = flutter.minSdkVersion  // Updated from flutter.minSdkVersion
+        targetSdk = 36  // Updated to match compileSdk
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
