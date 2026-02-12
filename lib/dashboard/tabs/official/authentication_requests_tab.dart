@@ -50,6 +50,25 @@ class _OfficialAuthenticationTabState extends State<OfficialAuthenticationTab> {
           } else {
             _verificationRequests = [];
           }
+          
+          // Normalize field names for consistency
+          _verificationRequests = _verificationRequests.map((request) {
+            final normalized = {
+              'id': request['id'],
+              'user_id': request['user_id'],
+              'verification_type': request['verificationType'],
+              'requested_discount_rate': request['discountRate'],
+              'user_photo_base64': request['userPhotoUrl'],
+              'valid_id_base64': request['validIdUrl'],
+              'status': request['status'],
+              'residential_address': request['address'],
+              'created_at': request['submittedAt'] ?? request['created_at'],
+              'email': request['email'],
+              'full_name': request['fullName'],
+              'contact_number': request['contactNumber'],
+            };
+            return normalized;
+          }).toList();
           _filteredRequests = _verificationRequests;
         } else {
           _verificationRequests = [];
