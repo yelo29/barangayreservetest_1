@@ -517,19 +517,9 @@ class _OfficialBookingFormScreenState extends State<OfficialBookingFormScreen> {
           ),
         ),
         actions: [
-          // Only show Reject button for pending bookings
-          if (allResidentBookings.first['status'] == 'pending')
-            TextButton.icon(
-              onPressed: () {
-                Navigator.pop(context); // Close details dialog
-                _rejectResidentBooking(allResidentBookings.first); // Reject the booking
-              },
-              icon: const Icon(Icons.cancel, color: Colors.red),
-              label: const Text('Reject', style: TextStyle(color: Colors.red)),
-            ),
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+            child: const Text('Cancel'),
           ),
         ],
       ),
