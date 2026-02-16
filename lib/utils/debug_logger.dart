@@ -35,10 +35,6 @@ class DebugLogger {
     }
   }
 
-  static void firebase(String message) {
-    log(message, tag: 'Firebase');
-  }
-
   static void api(String message) {
     log(message, tag: 'API');
   }
