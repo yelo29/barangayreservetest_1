@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../services/auth_api_service.dart';
 import '../../../services/data_service.dart';
-import '../../../services/api_service_updated.dart' as api_service;
+import '../../../services/api_service.dart' as api_service;
 import '../../../utils/debug_logger.dart';
 
 class ResidentAccountSettingsScreen extends StatefulWidget {

@@ -1,8 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'api_service_updated.dart';
-import 'api_service.dart' as api;
+import 'api_service.dart';
 import '../config/app_config.dart';
 import 'dart:async';
 
