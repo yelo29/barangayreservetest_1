@@ -1102,7 +1102,7 @@ def create_facility():
         elif 'swimming' in facility_name or 'pool' in facility_name:
             start_hour, end_hour = 6, 21  # 6 AM to 8 PM
         elif 'shooting' in facility_name or 'range' in facility_name:
-            start_hour, end_hour = 8, 18  # 8 AM to 5 PM
+            start_hour, end_hour = 6, 22  # 6 AM to 9 PM (updated to match other facilities)
         
         print(f"🔍 Generating time slots for facility {facility_id}: {start_hour}:00 to {end_hour}:00")
         
@@ -1166,7 +1166,7 @@ def regenerate_facility_timeslots(facility_id):
         elif 'swimming' in facility_name_lower or 'pool' in facility_name_lower:
             start_hour, end_hour = 6, 21  # 6 AM to 8 PM
         elif 'shooting' in facility_name_lower or 'range' in facility_name_lower:
-            start_hour, end_hour = 8, 18  # 8 AM to 5 PM
+            start_hour, end_hour = 6, 22  # 6 AM to 9 PM (updated to match other facilities)
         else:
             start_hour, end_hour = 6, 21  # Default 6 AM to 8 PM
         
