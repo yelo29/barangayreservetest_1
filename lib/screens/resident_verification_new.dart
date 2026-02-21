@@ -27,6 +27,7 @@ class _ResidentVerificationScreenState extends State<ResidentVerificationScreen>
   // State variables
   String _selectedVerificationType = '';
   bool _isLoading = false;
+  bool _hasPendingRequest = false;
   File? _profileImage;
   File? _idImage;
   String? _profileImageUrl;
@@ -44,6 +45,35 @@ class _ResidentVerificationScreenState extends State<ResidentVerificationScreen>
       _nameController.text = widget.userData!['fullName'] ?? '';
       _contactController.text = widget.userData!['contactNumber'] ?? '';
       _addressController.text = widget.userData!['address'] ?? '';
+    }
+    
+    // Check if user already has a pending verification request
+    _checkExistingVerificationRequest();
+  }
+
+  Future<void> _checkExistingVerificationRequest() async {
+    try {
+      final authApiService = AuthApiService();
+      final currentUser = await authApiService.ensureUserLoaded();
+      
+      if (currentUser == null) {
+        return; // User not logged in, allow verification
+      }
+
+      // Check if user already has a pending verification request
+      final result = await api_service.ApiService.getVerificationStatus(currentUser['id'].toString());
+      
+      if (result['success'] == true) {
+        final verificationData = result['data'];
+        if (verificationData['status'] == 'pending') {
+          // User already has pending request, disable submit button
+          setState(() {
+            _hasPendingRequest = true;
+          });
+        }
+      }
+    } catch (e) {
+      print('❌ Error checking verification status: $e');
     }
   }
 
@@ -161,6 +191,16 @@ class _ResidentVerificationScreenState extends State<ResidentVerificationScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please select verification type'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    if (_hasPendingRequest) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('YOU ALREADY HAVE SUBMITTED A VERIFICATION REQUEST! WAIT FOR YOUR REQUEST TO BE APPROVED OR REJECTED'),
           backgroundColor: Colors.orange,
         ),
       );
@@ -327,7 +367,7 @@ class _ResidentVerificationScreenState extends State<ResidentVerificationScreen>
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  onPressed: _isLoading ? null : _submitVerification,
+                  onPressed: _isLoading || _hasPendingRequest ? null : _submitVerification,
                   icon: _isLoading 
                       ? const SizedBox(
                           width: 20,
@@ -337,8 +377,10 @@ class _ResidentVerificationScreenState extends State<ResidentVerificationScreen>
                             strokeWidth: 2,
                           ),
                         )
-                      : const Icon(Icons.verified_user),
-                  label: Text(_isLoading ? 'Submitting...' : 'Submit Verification'),
+                      : _hasPendingRequest
+                          ? const Icon(Icons.hourglass_empty)
+                          : const Icon(Icons.cloud_upload),
+                  label: Text(_isLoading ? 'Submitting...' : (_hasPendingRequest ? 'Request Pending' : 'Submit Verification')),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blue,
                     foregroundColor: Colors.white,

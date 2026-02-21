@@ -64,45 +64,51 @@ class ApiService {
     }
   }
 
-  static Future<Map<String, dynamic>> uploadProfilePhoto(XFile image) async {
+  static Future<Map<String, dynamic>> getVerificationStatus(String userId) async {
     try {
       final token = await _getToken();
       if (token == null) {
         return {'success': false, 'message': 'No authentication token found'};
       }
 
-      // Create multipart request for file upload
-      final request = http.MultipartRequest(
-        'POST',
-        Uri.parse('$baseUrl/api/users/profile-photo'),
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/users/verification-status/$userId'),
+        headers: await getHeaders(),
       );
-
-      // Add image file
-      final imageBytes = await image.readAsBytes();
-      final imageFile = http.MultipartFile.fromBytes(
-        'profile_photo',
-        imageBytes,
-        image.name.split('.').last,
-      );
-      request.files.add(imageFile);
-
-      // Add authentication
-      request.headers.addAll(await getHeaders());
-
-      final response = await request.send();
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        if (data['success'] == true) {
-          return {'success': true, 'photo_url': data['photo_url']};
-        } else {
-          return {'success': false, 'message': data['message'] ?? 'Failed to upload photo'};
-        }
+        return {'success': true, 'data': data['data']};
       } else {
-        return {'success': false, 'message': 'Failed to upload photo'};
+        return {'success': false, 'message': 'Failed to check verification status'};
       }
     } catch (e) {
-      print('❌ uploadProfilePhoto error: $e');
+      print('❌ getVerificationStatus error: $e');
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> createVerificationRequest(Map<String, dynamic> verificationData) async {
+    try {
+      final token = await _getToken();
+      if (token == null) {
+        return {'success': false, 'message': 'No authentication token found'};
+      }
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/users/verification-request'),
+        headers: await getHeaders(),
+        body: json.encode(verificationData),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return {'success': true, 'message': data['message'] ?? 'Verification request submitted'};
+      } else {
+        return {'success': false, 'message': 'Failed to submit verification request'};
+      }
+    } catch (e) {
+      print('❌ createVerificationRequest error: $e');
       return {'success': false, 'message': 'Network error: $e'};
     }
   }
