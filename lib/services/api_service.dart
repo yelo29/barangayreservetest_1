@@ -39,14 +39,21 @@ class ApiService {
         return {'success': false, 'message': 'No authentication token found'};
       }
 
+      final url = '$baseUrl/api/users/profile';
+      print('📝 Updating user profile at: $url');
+      print('📝 Profile data: $userData');
+
       final response = await http.post(
-        Uri.parse('$baseUrl/api/users/profile'),
+        Uri.parse(url),
         headers: await getHeaders(),
         body: json.encode(userData),
       );
 
+      print('📥 Profile update response status: ${response.statusCode}');
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
+        print('📥 Profile update response: $data');
         if (data['success'] == true) {
           // Update local user data
           final prefs = await SharedPreferences.getInstance();
@@ -57,10 +64,12 @@ class ApiService {
           return {'success': false, 'message': data['message'] ?? 'Failed to update profile'};
         }
       } else {
-        return {'success': false, 'message': 'Failed to update profile'};
+        print('❌ Profile update error response: ${response.body}');
+        return {'success': false, 'message': 'Server error: ${response.statusCode}'};
       }
     } catch (e) {
       print('❌ updateUserProfile error: $e');
+      print('❌ Error type: ${e.runtimeType}');
       return {'success': false, 'message': 'Network error: $e'};
     }
   }
@@ -701,14 +710,19 @@ class ApiService {
         return {'success': false, 'message': 'No authentication token found'};
       }
 
+      final url = '$baseUrl/api/users/profile-photo';
+      print('📤 Uploading profile photo to: $url');
+
       // Create multipart request for file upload
       final request = http.MultipartRequest(
         'POST',
-        Uri.parse('$baseUrl/api/users/profile-photo'),
+        Uri.parse(url),
       );
 
       // Add image file
       final imageBytes = await image.readAsBytes();
+      print('📸 Image size: ${imageBytes.length} bytes');
+      
       final imageFile = http.MultipartFile.fromBytes(
         'profile_photo',
         imageBytes,
@@ -717,12 +731,18 @@ class ApiService {
       request.files.add(imageFile);
 
       // Add authentication
-      request.headers.addAll(await getHeaders());
+      final headers = await getHeaders();
+      print('🔐 Request headers: $headers');
+      request.headers.addAll(headers);
 
+      print('📤 Sending request...');
       final response = await request.send();
+      print('📥 Response status code: ${response.statusCode}');
+      print('📥 Response headers: ${response.headers}');
 
       if (response.statusCode == 200) {
         final responseBody = await response.stream.bytesToString();
+        print('📥 Response body: $responseBody');
         final data = json.decode(responseBody);
         if (data['success'] == true) {
           return {'success': true, 'photo_url': data['photo_url']};
@@ -730,10 +750,13 @@ class ApiService {
           return {'success': false, 'message': data['message'] ?? 'Failed to upload photo'};
         }
       } else {
-        return {'success': false, 'message': 'Failed to upload photo'};
+        final responseBody = await response.stream.bytesToString();
+        print('❌ Error response body: $responseBody');
+        return {'success': false, 'message': 'Server error: ${response.statusCode}'};
       }
     } catch (e) {
       print('❌ uploadProfilePhoto error: $e');
+      print('❌ Error type: ${e.runtimeType}');
       return {'success': false, 'message': 'Network error: $e'};
     }
   }
