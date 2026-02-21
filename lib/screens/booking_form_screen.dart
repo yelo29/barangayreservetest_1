@@ -160,7 +160,24 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
   void initState() {
     super.initState();
     _loadTimeSlotAvailability();
+    _initializePersonalInfo();
     // Note: Ban checking removed - user will implement new approach
+  }
+
+  void _initializePersonalInfo() {
+    // Auto-fill personal information for residents
+    if (widget.userData != null) {
+      setState(() {
+        _nameController.text = widget.userData!['full_name'] ?? widget.userData!['name'] ?? '';
+        _contactController.text = widget.userData!['contact_number'] ?? '';
+        _addressController.text = widget.userData!['address'] ?? '';
+      });
+      
+      print('🔍 Booking Form - Auto-filled personal info:');
+      print('🔍 Name: ${_nameController.text}');
+      print('🔍 Contact: ${_contactController.text}');
+      print('🔍 Address: ${_addressController.text}');
+    }
   }
 
   // Helper method to check if current user is an official

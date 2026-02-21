@@ -1313,6 +1313,137 @@ def update_user_profile():
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
+@app.route('/api/users/profile-photo', methods=['POST'])
+def upload_profile_photo():
+    try:
+        # Check if file is present
+        if 'profile_photo' not in request.files:
+            return jsonify({'success': False, 'message': 'No file provided'}), 400
+        
+        file = request.files['profile_photo']
+        email = request.form.get('email')
+        
+        if not email:
+            return jsonify({'success': False, 'message': 'Email is required'}), 400
+        
+        if file.filename == '':
+            return jsonify({'success': False, 'message': 'No file selected'}), 400
+        
+        # Validate file type
+        allowed_extensions = {'png', 'jpg', 'jpeg', 'gif'}
+        if not ('.' in file.filename and 
+                file.filename.rsplit('.', 1)[1].lower() in allowed_extensions):
+            return jsonify({'success': False, 'message': 'Invalid file type'}), 400
+        
+        # Generate unique filename
+        import uuid
+        import os
+        filename = str(uuid.uuid4()) + '.' + file.filename.rsplit('.', 1)[1].lower()
+        
+        # Create uploads directory if it doesn't exist
+        upload_folder = os.path.join(os.getcwd(), 'uploads', 'profile_photos')
+        os.makedirs(upload_folder, exist_ok=True)
+        
+        # Save file
+        file_path = os.path.join(upload_folder, filename)
+        file.save(file_path)
+        
+        # Update user's profile photo URL in database
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Create URL for the uploaded photo
+        photo_url = f'{Config.get_server_url()}/uploads/profile_photos/{filename}'
+        
+        cursor.execute('''
+            UPDATE users 
+            SET profile_photo_url = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE email = ?
+        ''', (photo_url, email))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'success': True, 
+            'message': 'Profile photo uploaded successfully',
+            'photo_url': photo_url
+        })
+        
+    except Exception as e:
+        print(f"❌ Profile photo upload error: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/users/profile-photo-base64', methods=['POST'])
+def upload_profile_photo_base64():
+    try:
+        data = request.get_json()
+        
+        email = data.get('email')
+        base64_data = data.get('profile_photo_base64')
+        filename = data.get('filename', 'profile_photo.jpg')
+        
+        if not email or not base64_data:
+            return jsonify({'success': False, 'message': 'Email and base64 data required'}), 400
+        
+        # Decode base64 data
+        import base64
+        import os
+        
+        # Remove data URL prefix if present
+        if 'base64,' in base64_data:
+            base64_data = base64_data.split('base64,')[1]
+        
+        image_data = base64.b64decode(base64_data)
+        
+        # Create uploads directory if it doesn't exist
+        upload_folder = os.path.join(os.getcwd(), 'uploads', 'profile_photos')
+        os.makedirs(upload_folder, exist_ok=True)
+        
+        # Generate unique filename
+        import uuid
+        unique_filename = str(uuid.uuid4()) + '_' + filename
+        file_path = os.path.join(upload_folder, unique_filename)
+        
+        # Save file
+        with open(file_path, 'wb') as f:
+            f.write(image_data)
+        
+        # Update user's profile photo URL in database
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Create URL for the uploaded photo
+        photo_url = f'{Config.get_server_url()}/uploads/profile_photos/{unique_filename}'
+        
+        cursor.execute('''
+            UPDATE users 
+            SET profile_photo_url = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE email = ?
+        ''', (photo_url, email))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'success': True, 
+            'message': 'Profile photo uploaded successfully',
+            'photo_url': photo_url
+        })
+        
+    except Exception as e:
+        print(f"❌ Profile photo upload (base64) error: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/uploads/profile_photos/<filename>')
+def serve_profile_photo(filename):
+    try:
+        upload_folder = os.path.join(os.getcwd(), 'uploads', 'profile_photos')
+        return send_from_directory(upload_folder, filename)
+    except Exception as e:
+        print(f"❌ Serve profile photo error: {e}")
+        return jsonify({'success': False, 'message': 'File not found'}), 404
+
 @app.route('/api/users/profile/<email>', methods=['GET'])
 def get_user_profile(email):
     try:

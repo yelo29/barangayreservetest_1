@@ -7,22 +7,17 @@ import '../../../screens/resident_verification_new.dart';
 import '../../../main.dart';
 
 class ResidentProfileTab extends StatefulWidget {
+  final Function(BuildContext)? onLogout;
   final Map<String, dynamic>? userData;
-  final Function(BuildContext) onLogout;
-  
-  const ResidentProfileTab({
-    super.key, 
-    this.userData,
-    required this.onLogout,
-  });
+  const ResidentProfileTab({super.key, this.onLogout, this.userData});
 
   @override
   State<ResidentProfileTab> createState() => _ResidentProfileTabState();
 }
 
 class _ResidentProfileTabState extends State<ResidentProfileTab> {
+  final AuthApiService _authApiService = AuthApiService();
   Map<String, dynamic>? _currentUser;
-  AuthApiService _authApiService = AuthApiService();
   bool _isLoading = true;
   String? _profilePhotoUrl;
 
@@ -32,40 +27,42 @@ class _ResidentProfileTabState extends State<ResidentProfileTab> {
     _loadUserData();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Refresh data when tab becomes visible again
+    _refreshUserData();
+  }
+
+  Future<void> _refreshUserData() async {
+    try {
+      print('🔄 Refreshing user data in Profile Tab...');
+      await _loadUserData();
+    } catch (e) {
+      print('❌ Error refreshing user data: $e');
+    }
+  }
+
   Future<void> _loadUserData() async {
     try {
-      // Use DataService for consistent user profile fetching
-      final profileResponse = await DataService.fetchUserProfile();
+      print('🔄 Loading fresh user data in Profile Tab...');
       
-      if (profileResponse['success'] == true) {
-        final currentUser = profileResponse['data'];
-        
-        // Also get current user data from AuthApiService for consistency
-        final authUser = await _authApiService.getCurrentUser();
-        
-        setState(() {
-          _currentUser = authUser ?? currentUser;
-          _isLoading = false;
-        });
+      // Force refresh from server to get latest data
+      await _authApiService.restoreUserFromToken();
+      final currentUser = await _authApiService.getCurrentUser();
+      
+      setState(() {
+        _currentUser = currentUser;
+        _isLoading = false;
+      });
+      
+      // Load profile photo from verification request
+      if (_currentUser != null) {
+        _profilePhotoUrl = _currentUser!['profile_photo_url'] ?? '';
         
         print('🔍 ResidentProfileTab - User profile loaded from DataService: $currentUser');
         print('🔍 ResidentProfileTab - Verified status: ${_currentUser?['verified']}');
         print('🔍 ResidentProfileTab - Discount rate: ${_currentUser?['discount_rate']}');
-      } else {
-        // Fallback to AuthApiService if DataService fails
-        await _authApiService.restoreUserFromToken();
-        final currentUser = await _authApiService.getCurrentUser();
-        setState(() {
-          _currentUser = currentUser;
-          _isLoading = false;
-        });
-        print('🔍 ResidentProfileTab - Fallback to AuthApiService: $currentUser');
-      }
-      
-      // Load profile photo from verification request
-      if (_currentUser != null) {
-        _profilePhotoUrl = await _authApiService.getUserProfilePhoto();
-        
         print('🔍 ResidentProfileTab - Profile photo URL: $_profilePhotoUrl');
         print('🔍 ResidentProfileTab - isVerifiedResident: ${_authApiService.isVerifiedResident()}');
         print('🔍 ResidentProfileTab - isVerifiedNonResident: ${_authApiService.isVerifiedNonResident()}');
@@ -155,7 +152,7 @@ class _ResidentProfileTabState extends State<ResidentProfileTab> {
                                     _currentUser?['imageUrl']?.isNotEmpty == true)
                               ? ClipRRect(
                                   borderRadius: BorderRadius.circular(40),
-                                  child: _buildBase64Image(
+                                  child: _buildProfileImage(
                                     _profilePhotoUrl ??
                                     _currentUser!['profile_photo_url'] ?? 
                                     _currentUser!['profilePhotoUrl'] ?? 
@@ -164,7 +161,7 @@ class _ResidentProfileTabState extends State<ResidentProfileTab> {
                                     _currentUser!['profileImage'] ??
                                     _currentUser!['avatar'] ??
                                     _currentUser!['photo_url'] ??
-                                    _currentUser!['imageUrl']
+                                    _currentUser!['imageUrl'] ?? ''
                                   ),
                                 )
                               : Icon(
@@ -244,9 +241,10 @@ class _ResidentProfileTabState extends State<ResidentProfileTab> {
                           ],
                         ),
                       ),
-                      // Refresh button
+                      
+                      // Refresh button in header
                       IconButton(
-                        onPressed: _refreshData,
+                        onPressed: _refreshUserData,
                         icon: const Icon(Icons.refresh, color: Colors.white),
                         tooltip: 'Refresh Profile',
                       ),
@@ -272,9 +270,7 @@ class _ResidentProfileTabState extends State<ResidentProfileTab> {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => ResidentAccountSettingsScreen(
-                            userData: widget.userData,
-                          ),
+                          builder: (context) => ResidentAccountSettingsScreen(userData: _currentUser),
                         ),
                       );
                     },
@@ -334,7 +330,7 @@ class _ResidentProfileTabState extends State<ResidentProfileTab> {
                     child: ElevatedButton.icon(
                       onPressed: () {
                         print('🔥 Logout button pressed - using official logout method');
-                        widget.onLogout(context);
+                        widget.onLogout?.call(context);
                       },
                       icon: const Icon(Icons.logout),
                       label: const Text('Logout'),
@@ -417,6 +413,53 @@ class _ResidentProfileTabState extends State<ResidentProfileTab> {
 
   void _showCustomerService() {
    
+  }
+
+  Widget _buildProfileImage(String imageUrl) {
+    print('🔍 DEBUG: _buildProfileImage called with: $imageUrl');
+    
+    // Use the actual profile photo URL
+    String finalUrl = imageUrl.isNotEmpty ? imageUrl : '';
+    
+    print('🔍 DEBUG: Final image URL: $finalUrl');
+    
+    // Check if it's a URL (starts with http) or base64 data
+    if (finalUrl.startsWith('http')) {
+      print('🔍 DEBUG: Loading image from URL: $finalUrl');
+      // It's a URL, use NetworkImage
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(40),
+        child: Image.network(
+          finalUrl,
+          width: 80,
+          height: 80,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            print('❌ Error loading profile image from URL: $error');
+            print('❌ Stack trace: $stackTrace');
+            return Icon(Icons.person, size: 40, color: Colors.blue[600]);
+          },
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) return child;
+            return Center(
+              child: CircularProgressIndicator(
+                value: loadingProgress.expectedTotalBytes != null
+                    ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                    : null,
+                strokeWidth: 2,
+              ),
+            );
+          },
+        ),
+      );
+    } else {
+      print('🔍 DEBUG: Loading image from base64 data');
+      // It's base64 data, use existing method
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(40),
+        child: _buildBase64Image(finalUrl),
+      );
+    }
   }
 
   Widget _buildBase64Image(String base64String) {

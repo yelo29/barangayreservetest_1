@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import '../../../services/auth_api_service.dart';
 import '../../../services/data_service.dart';
 import '../../../services/api_service_updated.dart' as api_service;
+import '../../../services/api_service.dart';
 import '../../../utils/debug_logger.dart';
+import 'package:image_picker/image_picker.dart';
 
 class ResidentAccountSettingsScreen extends StatefulWidget {
   final Map<String, dynamic>? userData;
@@ -16,8 +18,12 @@ class ResidentAccountSettingsScreen extends StatefulWidget {
 class _ResidentAccountSettingsScreenState extends State<ResidentAccountSettingsScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
+  final _contactController = TextEditingController();
+  final _addressController = TextEditingController();
   bool _isLoading = false;
   bool _isLoadingContact = false;
+  bool _isUploadingPhoto = false;
+  String? _profilePhotoUrl;
   List<Map<String, dynamic>> _officials = [];
 
   @override
@@ -30,6 +36,9 @@ class _ResidentAccountSettingsScreenState extends State<ResidentAccountSettingsS
   void _loadUserData() {
     if (widget.userData != null) {
       _nameController.text = widget.userData!['full_name'] ?? '';
+      _contactController.text = widget.userData!['contact_number'] ?? '';
+      _addressController.text = widget.userData!['address'] ?? '';
+      _profilePhotoUrl = widget.userData!['profile_photo_url'] ?? '';
     }
   }
 
@@ -92,15 +101,20 @@ class _ResidentAccountSettingsScreenState extends State<ResidentAccountSettingsS
       }
 
       // Update profile using server API
-      // TODO: Implement proper profile update in DataService
-      // For now, just update local data
-      final result = {'success': true};
+      final result = await ApiService.updateUserProfile({
+        'email': currentUser['email'],
+        'full_name': _nameController.text.trim(),
+        'contact_number': _contactController.text.trim(),
+        'address': _addressController.text.trim(),
+      });
 
       if (result['success'] == true) {
         // Update local user data
         authApiService.updateCurrentUser({
           ...currentUser,
           'full_name': _nameController.text.trim(),
+          'contact_number': _contactController.text.trim(),
+          'address': _addressController.text.trim(),
         });
 
         ScaffoldMessenger.of(context).showSnackBar(
@@ -110,7 +124,7 @@ class _ResidentAccountSettingsScreenState extends State<ResidentAccountSettingsS
           ),
         );
       } else {
-        throw Exception(result['error'] ?? 'Failed to update profile');
+        throw Exception(result['message'] ?? 'Failed to update profile');
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -119,6 +133,67 @@ class _ResidentAccountSettingsScreenState extends State<ResidentAccountSettingsS
     } finally {
       setState(() {
         _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _pickAndUploadPhoto() async {
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 800,
+        maxHeight: 800,
+        imageQuality: 85,
+      );
+
+      if (image == null) return;
+
+      setState(() {
+        _isUploadingPhoto = true;
+      });
+
+      // Get current user email
+      final authApiService = AuthApiService();
+      final currentUser = await authApiService.ensureUserLoaded();
+      
+      if (currentUser == null) {
+        throw Exception('User not logged in');
+      }
+
+      // Upload photo to server
+      final result = await ApiService.uploadProfilePhoto(
+        currentUser['email'],
+        image,
+      );
+
+      if (result['success'] == true) {
+        setState(() {
+          _profilePhotoUrl = result['photo_url'];
+        });
+
+        // Update local user data
+        authApiService.updateCurrentUser({
+          ...currentUser,
+          'profile_photo_url': result['photo_url'],
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Profile photo updated successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        throw Exception(result['message'] ?? 'Failed to upload photo');
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error uploading photo: $e')),
+      );
+    } finally {
+      setState(() {
+        _isUploadingPhoto = false;
       });
     }
   }
@@ -223,7 +298,98 @@ class _ResidentAccountSettingsScreenState extends State<ResidentAccountSettingsS
 
             const SizedBox(height: 24),
 
-            // Update Name Section
+            // Profile Photo Section
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.blue.withOpacity(0.1),
+                    spreadRadius: 2,
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        // Profile Photo
+                        Container(
+                          width: 80,
+                          height: 80,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.grey[200],
+                            image: _profilePhotoUrl != null && _profilePhotoUrl!.isNotEmpty
+                                ? DecorationImage(
+                                    image: NetworkImage(_profilePhotoUrl!),
+                                    fit: BoxFit.cover,
+                                  )
+                                : null,
+                          ),
+                          child: _profilePhotoUrl == null || _profilePhotoUrl!.isEmpty
+                              ? const Icon(
+                                  Icons.person,
+                                  size: 40,
+                                  color: Colors.grey,
+                                )
+                              : null,
+                        ),
+                        const SizedBox(width: 16),
+                        // Email and Change Photo Button
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                widget.userData?['email'] ?? 'user@example.com',
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              ElevatedButton.icon(
+                                onPressed: _isUploadingPhoto ? null : _pickAndUploadPhoto,
+                                icon: _isUploadingPhoto
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                          color: Colors.white,
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : const Icon(Icons.camera_alt),
+                                label: Text(_isUploadingPhoto ? 'Uploading...' : 'Change Photo'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.blue,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 24),
+
+            // Personal Information Section (renamed from "Update Name")
             Container(
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -245,7 +411,7 @@ class _ResidentAccountSettingsScreenState extends State<ResidentAccountSettingsS
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Update Name',
+                        'Personal Information',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
@@ -272,6 +438,45 @@ class _ResidentAccountSettingsScreenState extends State<ResidentAccountSettingsS
                         },
                       ),
                       const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _contactController,
+                        decoration: InputDecoration(
+                          labelText: 'Contact Number',
+                          prefixIcon: const Icon(Icons.phone),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          filled: true,
+                          fillColor: Colors.grey[50],
+                        ),
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Please enter your contact number';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _addressController,
+                        decoration: InputDecoration(
+                          labelText: 'Address',
+                          prefixIcon: const Icon(Icons.home),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          filled: true,
+                          fillColor: Colors.grey[50],
+                        ),
+                        maxLines: 3,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Please enter your address';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton.icon(
@@ -286,7 +491,7 @@ class _ResidentAccountSettingsScreenState extends State<ResidentAccountSettingsS
                                   ),
                                 )
                               : const Icon(Icons.save),
-                          label: Text(_isLoading ? 'Updating...' : 'Update Name'),
+                          label: Text(_isLoading ? 'Updating...' : 'Update Information'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.blue,
                             foregroundColor: Colors.white,

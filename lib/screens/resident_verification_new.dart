@@ -41,8 +41,8 @@ class _ResidentVerificationScreenState extends State<ResidentVerificationScreen>
   void _initializeForm() {
     // Auto-fill user data
     if (widget.userData != null) {
-      _nameController.text = widget.userData!['fullName'] ?? '';
-      _contactController.text = widget.userData!['contactNumber'] ?? '';
+      _nameController.text = widget.userData!['full_name'] ?? '';
+      _contactController.text = widget.userData!['contact_number'] ?? '';
       _addressController.text = widget.userData!['address'] ?? '';
     }
   }

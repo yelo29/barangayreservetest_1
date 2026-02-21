@@ -1,8 +1,10 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:image_picker/image_picker.dart';
 import 'base64_image_service.dart';
 import '../config/app_config.dart';
 import 'ban_detection_service.dart';
@@ -614,6 +616,79 @@ class ApiService {
 
   static Future<Map<String, dynamic>> updateUserProfile(Map<String, dynamic> profileData) async {
     return await updateProfile(profileData);
+  }
+
+  // Upload profile photo - Web compatible version
+  static Future<Map<String, dynamic>> uploadProfilePhoto(String email, XFile imageFile) async {
+    try {
+      if (kIsWeb) {
+        // For web, we need to use a different approach
+        // Read file as bytes and convert to base64
+        final bytes = await imageFile.readAsBytes();
+        final base64String = base64.encode(bytes);
+        
+        final response = await http.post(
+          Uri.parse('$baseUrl/api/users/profile-photo-base64'),
+          headers: await getHeaders(),
+          body: json.encode({
+            'email': email,
+            'profile_photo_base64': base64String,
+            'filename': 'profile_${DateTime.now().millisecondsSinceEpoch}.jpg'
+          }),
+        );
+        
+        print('📸 Profile photo upload (web) response status: ${response.statusCode}');
+        print('📸 Profile photo upload (web) response body: ${response.body}');
+        
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          print('📸 Profile photo uploaded successfully (web): ${data['photo_url']}');
+          return data;
+        } else {
+          print('❌ Profile photo upload (web) failed with status: ${response.statusCode}');
+          print('❌ Response body: ${response.body}');
+          return {'success': false, 'message': 'Upload failed'};
+        }
+      } else {
+        // For mobile/desktop, use MultipartFile
+        final request = http.MultipartRequest(
+          'POST',
+          Uri.parse('$baseUrl/api/users/profile-photo'),
+        );
+        
+        // Add email field
+        request.fields['email'] = email;
+        
+        // Add file
+        final file = await http.MultipartFile.fromPath('profile_photo', imageFile.path);
+        request.files.add(file);
+        
+        // Add headers
+        request.headers.addAll(await getHeaders());
+        
+        print('📸 Uploading profile photo for email: $email');
+        print('📸 File path: ${imageFile.path}');
+        
+        final streamedResponse = await request.send();
+        final response = await http.Response.fromStream(streamedResponse);
+        
+        print('📸 Profile photo upload response status: ${response.statusCode}');
+        print('📸 Profile photo upload response body: ${response.body}');
+        
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          print('📸 Profile photo uploaded successfully: ${data['photo_url']}');
+          return data;
+        } else {
+          print('❌ Profile photo upload failed with status: ${response.statusCode}');
+          print('❌ Response body: ${response.body}');
+          return {'success': false, 'message': 'Upload failed'};
+        }
+      }
+    } catch (e) {
+      print('❌ uploadProfilePhoto error: $e');
+      return {'success': false, 'message': 'Network error: $e'};
+    }
   }
 
   static Future<Map<String, dynamic>> createVerificationRequest(Map<String, dynamic> verificationData) async {
