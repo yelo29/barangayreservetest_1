@@ -713,6 +713,14 @@ class ApiService {
       final url = '$baseUrl/api/users/profile-photo';
       print('📤 Uploading profile photo to: $url');
 
+      // First test basic connectivity to the server
+      print('🔍 Testing server connectivity...');
+      final connectivityTest = await http.get(
+        Uri.parse('$baseUrl/api/health'),
+        headers: await getHeaders(),
+      );
+      print('🔍 Connectivity test status: ${connectivityTest.statusCode}');
+
       // Create multipart request for file upload
       final request = http.MultipartRequest(
         'POST',
@@ -732,8 +740,12 @@ class ApiService {
 
       // Add authentication
       final headers = await getHeaders();
-      print('🔐 Request headers: $headers');
-      request.headers.addAll(headers);
+      // For multipart requests, we need to remove Content-Type from headers
+      // and let http package set it automatically with boundary
+      final multipartHeaders = Map<String, String>.from(headers);
+      multipartHeaders.remove('Content-Type');
+      print('🔐 Request headers: $multipartHeaders');
+      request.headers.addAll(multipartHeaders);
 
       print('📤 Sending request...');
       final response = await request.send();
@@ -757,6 +769,12 @@ class ApiService {
     } catch (e) {
       print('❌ uploadProfilePhoto error: $e');
       print('❌ Error type: ${e.runtimeType}');
+      
+      // Check if it's a network connectivity issue
+      if (e.toString().contains('Failed to fetch')) {
+        return {'success': false, 'message': 'Network error: Unable to connect to server. Please check if the server is running and accessible.'};
+      }
+      
       return {'success': false, 'message': 'Network error: $e'};
     }
   }
