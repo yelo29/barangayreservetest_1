@@ -161,6 +161,11 @@ class _ResidentAccountSettingsScreenState extends State<ResidentAccountSettingsS
             'profile_photo_url': result['photo_url'],
           });
 
+          // Update widget userData to trigger rebuild
+          if (widget.userData != null) {
+            widget.userData!['profile_photo_url'] = result['photo_url'];
+          }
+
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Profile photo updated successfully!'),
@@ -354,7 +359,7 @@ class _ResidentAccountSettingsScreenState extends State<ResidentAccountSettingsS
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Update Name',
+                        'Personal Information',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
@@ -381,6 +386,46 @@ class _ResidentAccountSettingsScreenState extends State<ResidentAccountSettingsS
                         },
                       ),
                       const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _contactNumberController,
+                        decoration: InputDecoration(
+                          labelText: 'Contact Number',
+                          prefixIcon: const Icon(Icons.phone),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          filled: true,
+                          fillColor: Colors.grey[50],
+                        ),
+                        keyboardType: TextInputType.phone,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Please enter your contact number';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _addressController,
+                        decoration: InputDecoration(
+                          labelText: 'Address',
+                          prefixIcon: const Icon(Icons.location_on),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          filled: true,
+                          fillColor: Colors.grey[50],
+                        ),
+                        maxLines: 2,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Please enter your address';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton.icon(
@@ -395,7 +440,7 @@ class _ResidentAccountSettingsScreenState extends State<ResidentAccountSettingsS
                                   ),
                                 )
                               : const Icon(Icons.save),
-                          label: Text(_isLoading ? 'Updating...' : 'Update Name'),
+                          label: Text(_isLoading ? 'Updating...' : 'Update Personal Information'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.blue,
                             foregroundColor: Colors.white,
