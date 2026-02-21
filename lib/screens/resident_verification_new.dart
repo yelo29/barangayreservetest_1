@@ -260,7 +260,7 @@ class _ResidentVerificationScreenState extends State<ResidentVerificationScreen>
       };
 
       // Submit verification request to server
-      final result = await ApiService.createVerificationRequest(verificationData);
+      final result = await api_service.ApiService.createVerificationRequest(verificationData);
       
       if (result['success']) {
         ScaffoldMessenger.of(context).showSnackBar(

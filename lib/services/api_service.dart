@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:image_picker/image_picker.dart';
 import 'base64_image_service.dart';
 import '../config/app_config.dart';
 import 'ban_detection_service.dart';
@@ -711,7 +712,7 @@ class ApiService {
       final imageFile = http.MultipartFile.fromBytes(
         'profile_photo',
         imageBytes,
-        image.name.split('.').last,
+        image.name,
       );
       request.files.add(imageFile);
 
@@ -721,7 +722,8 @@ class ApiService {
       final response = await request.send();
 
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
+        final responseBody = await response.stream.bytesToString();
+        final data = json.decode(responseBody);
         if (data['success'] == true) {
           return {'success': true, 'photo_url': data['photo_url']};
         } else {
