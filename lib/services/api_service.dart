@@ -712,7 +712,7 @@ class ApiService {
       final imageFile = http.MultipartFile.fromBytes(
         'profile_photo',
         imageBytes,
-        image.name,
+        filename: image.name,
       );
       request.files.add(imageFile);
 
