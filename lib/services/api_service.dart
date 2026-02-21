@@ -28,10 +28,85 @@ class ApiService {
       print('❌ _saveToken error: $e');
       print('❌ Token type: ${token.runtimeType}');
       print('❌ Stack trace: ${StackTrace.current}');
-      throw e;
     }
   }
-  
+
+  static Future<Map<String, dynamic>> updateUserProfile(Map<String, dynamic> userData) async {
+    try {
+      final token = await _getToken();
+      if (token == null) {
+        return {'success': false, 'message': 'No authentication token found'};
+      }
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/users/profile'),
+        headers: await getHeaders(),
+        body: json.encode(userData),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true) {
+          // Update local user data
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('user_email', userData['email'] ?? '');
+          
+          return {'success': true, 'message': 'Profile updated successfully'};
+        } else {
+          return {'success': false, 'message': data['message'] ?? 'Failed to update profile'};
+        }
+      } else {
+        return {'success': false, 'message': 'Failed to update profile'};
+      }
+    } catch (e) {
+      print('❌ updateUserProfile error: $e');
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> uploadProfilePhoto(XFile image) async {
+    try {
+      final token = await _getToken();
+      if (token == null) {
+        return {'success': false, 'message': 'No authentication token found'};
+      }
+
+      // Create multipart request for file upload
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$baseUrl/api/users/profile-photo'),
+      );
+
+      // Add image file
+      final imageBytes = await image.readAsBytes();
+      final imageFile = http.MultipartFile.fromBytes(
+        'profile_photo',
+        imageBytes,
+        image.name.split('.').last,
+      );
+      request.files.add(imageFile);
+
+      // Add authentication
+      request.headers.addAll(await getHeaders());
+
+      final response = await request.send();
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true) {
+          return {'success': true, 'photo_url': data['photo_url']};
+        } else {
+          return {'success': false, 'message': data['message'] ?? 'Failed to upload photo'};
+        }
+      } else {
+        return {'success': false, 'message': 'Failed to upload photo'};
+      }
+    } catch (e) {
+      print('❌ uploadProfilePhoto error: $e');
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
   static Future<String?> _getToken() async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('auth_token');

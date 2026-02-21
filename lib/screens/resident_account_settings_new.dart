@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../services/auth_api_service.dart';
 import '../../../services/data_service.dart';
 import '../../../services/api_service.dart' as api_service;
@@ -16,6 +17,8 @@ class ResidentAccountSettingsScreen extends StatefulWidget {
 class _ResidentAccountSettingsScreenState extends State<ResidentAccountSettingsScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
+  final _contactNumberController = TextEditingController();
+  final _addressController = TextEditingController();
   bool _isLoading = false;
   bool _isLoadingContact = false;
   List<Map<String, dynamic>> _officials = [];
@@ -30,6 +33,8 @@ class _ResidentAccountSettingsScreenState extends State<ResidentAccountSettingsS
   void _loadUserData() {
     if (widget.userData != null) {
       _nameController.text = widget.userData!['full_name'] ?? '';
+      _contactNumberController.text = widget.userData!['contact_number'] ?? '';
+      _addressController.text = widget.userData!['address'] ?? '';
     }
   }
 
@@ -92,15 +97,20 @@ class _ResidentAccountSettingsScreenState extends State<ResidentAccountSettingsS
       }
 
       // Update profile using server API
-      // TODO: Implement proper profile update in DataService
-      // For now, just update local data
-      final result = {'success': true};
+      final result = await api_service.ApiService.updateUserProfile({
+        ...currentUser,
+        'full_name': _nameController.text.trim(),
+        'contact_number': _contactNumberController.text.trim(),
+        'address': _addressController.text.trim(),
+      });
 
       if (result['success'] == true) {
         // Update local user data
         authApiService.updateCurrentUser({
           ...currentUser,
           'full_name': _nameController.text.trim(),
+          'contact_number': _contactNumberController.text.trim(),
+          'address': _addressController.text.trim(),
         });
 
         ScaffoldMessenger.of(context).showSnackBar(
@@ -115,6 +125,54 @@ class _ResidentAccountSettingsScreenState extends State<ResidentAccountSettingsS
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error updating profile: $e')),
+      );
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _pickProfilePhoto() async {
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+      
+      if (image != null) {
+        setState(() {
+          _isLoading = true;
+        });
+
+        final authApiService = AuthApiService();
+        final currentUser = await authApiService.ensureUserLoaded();
+        
+        if (currentUser == null) {
+          throw Exception('User not logged in');
+        }
+
+        // Upload photo to server
+        final result = await api_service.ApiService.uploadProfilePhoto(image);
+
+        if (result['success'] == true) {
+          // Update local user data with new photo URL
+          authApiService.updateCurrentUser({
+            ...currentUser,
+            'profile_photo_url': result['photo_url'],
+          });
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Profile photo updated successfully!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        } else {
+          throw Exception(result['error'] ?? 'Failed to upload photo');
+        }
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error updating photo: $e')),
       );
     } finally {
       setState(() {
@@ -158,17 +216,34 @@ class _ResidentAccountSettingsScreenState extends State<ResidentAccountSettingsS
                 children: [
                   Row(
                     children: [
-                      Container(
-                        width: 60,
-                        height: 60,
-                        decoration: BoxDecoration(
-                          color: Colors.blue[50],
-                          borderRadius: BorderRadius.circular(30),
-                        ),
-                        child: Icon(
-                          Icons.person,
-                          size: 30,
-                          color: Colors.blue[600],
+                      GestureDetector(
+                        onTap: _pickProfilePhoto,
+                        child: Container(
+                          width: 60,
+                          height: 60,
+                          decoration: BoxDecoration(
+                            color: Colors.blue[50],
+                            borderRadius: BorderRadius.circular(30),
+                            border: Border.all(color: Colors.white, width: 2),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(28),
+                            child: widget.userData?['profile_photo_url'] != null && widget.userData!['profile_photo_url']!.isNotEmpty
+                                ? Image.network(
+                                    '${AppConfig.baseUrl}/uploads/profile_photos/${widget.userData!['profile_photo_url']}',
+                                    width: 60,
+                                    height: 60,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) {
+                                      return Icon(Icons.person, size: 30, color: Colors.blue[600]);
+                                    },
+                                  )
+                                : Icon(
+                                    Icons.person,
+                                    size: 30,
+                                    color: Colors.blue[600],
+                                  ),
+                          ),
                         ),
                       ),
                       const SizedBox(width: 16),
@@ -184,7 +259,40 @@ class _ResidentAccountSettingsScreenState extends State<ResidentAccountSettingsS
                                 color: Colors.black87,
                               ),
                             ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Contact Number',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.black54,
+                              ),
+                            ),
                             const SizedBox(height: 4),
+                            Text(
+                              widget.userData?['contact_number'] ?? 'Not set',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.black87,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Address',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.black54,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              widget.userData?['address'] ?? 'Not set',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.black87,
+                              ),
+                            ),
                             if (widget.userData?['verified'] == true)
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
