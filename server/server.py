@@ -1282,22 +1282,20 @@ def get_user_by_id(user_id):
         else:
             return jsonify({'success': False, 'message': 'User not found'}), 404
             
+@app.route('/api/users/profile', methods=['PUT', 'GET'])
 def update_user_profile():
     try:
         if request.method == 'GET':
             # Handle GET request for profile retrieval
-            user_id = get_jwt_identity()
-            if not user_id:
-                return jsonify({'success': False, 'message': 'User not found'}), 404
+            # Use email parameter like the existing /api/me endpoint
+            email = request.args.get('email')
+            if not email:
+                return jsonify({'success': False, 'message': 'Email parameter required'}), 400
             
             conn = get_db_connection()
             cursor = conn.cursor()
-            cursor.execute("""
-                SELECT id, full_name, email, contact_number, address, 
-                       profile_photo_url, is_verified, verification_status, created_at
-                FROM users WHERE id = ?
-                """, (user_id,))
             
+            cursor.execute('SELECT id, email, full_name, role, verified, verification_type, discount_rate, contact_number, address, profile_photo_url, is_active, email_verified, last_login, created_at, updated_at FROM users WHERE email = ?', (email,))
             user = cursor.fetchone()
             conn.close()
             
@@ -1307,14 +1305,14 @@ def update_user_profile():
             # Convert to dictionary with proper keys
             user_data = {
                 'id': user[0],
-                'fullName': user[1],
-                'email': user[2],
-                'contactNumber': user[3],
-                'address': user[4],
-                'profile_photo_url': user[5],
-                'isVerified': user[6],
-                'verificationStatus': user[7],
-                'createdAt': user[8]
+                'fullName': user[2],
+                'email': user[1],
+                'contactNumber': user[6],
+                'address': user[7],
+                'profile_photo_url': user[8],
+                'isVerified': user[3],
+                'verificationStatus': user[4],
+                'createdAt': user[11]
             }
             
             return jsonify({'success': True, 'data': user_data})
@@ -1358,11 +1356,10 @@ def update_user_profile():
 
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
-    finally:
-        if 'conn' in locals():
-            conn.close()
 
-@app.route('/api/users/profile/<email>', methods=['GET'])
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
 def get_user_profile(email):
     try:
         conn = get_db_connection()
