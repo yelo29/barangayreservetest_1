@@ -160,7 +160,19 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
   void initState() {
     super.initState();
     _loadTimeSlotAvailability();
-    // Note: Ban checking removed - user will implement new approach
+    _loadUserData();
+  }
+
+  void _loadUserData() async {
+    // Auto-fill user data from profile
+    final authApiService = AuthApiService();
+    final currentUser = await authApiService.ensureUserLoaded();
+    
+    if (currentUser != null) {
+      _nameController.text = currentUser['full_name'] ?? '';
+      _contactController.text = currentUser['contact_number'] ?? '';
+      _addressController.text = currentUser['address'] ?? '';
+    }
   }
 
   // Helper method to check if current user is an official
