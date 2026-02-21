@@ -43,7 +43,7 @@ class ApiService {
       print('📝 Updating user profile at: $url');
       print('📝 Profile data: $userData');
 
-      final response = await http.post(
+      final response = await http.put(
         Uri.parse(url),
         headers: await getHeaders(),
         body: json.encode(userData),
@@ -85,15 +85,14 @@ class ApiService {
         Uri.parse('$baseUrl/api/users/verification-status/$userId'),
         headers: await getHeaders(),
       );
-
+      
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        return {'success': true, 'data': data['data']};
+        return {'success': true, 'data': data};
       } else {
-        return {'success': false, 'message': 'Failed to check verification status'};
+        return {'success': false, 'message': 'Server error: ${response.statusCode}'};
       }
     } catch (e) {
-      print('❌ getVerificationStatus error: $e');
       return {'success': false, 'message': 'Network error: $e'};
     }
   }

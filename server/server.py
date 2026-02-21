@@ -1282,36 +1282,85 @@ def get_user_by_id(user_id):
         else:
             return jsonify({'success': False, 'message': 'User not found'}), 404
             
+def update_user_profile():
+    try:
+        if request.method == 'GET':
+            # Handle GET request for profile retrieval
+            user_id = get_jwt_identity()
+            if not user_id:
+                return jsonify({'success': False, 'message': 'User not found'}), 404
+            
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT id, full_name, email, contact_number, address, 
+                       profile_photo_url, is_verified, verification_status, created_at
+                FROM users WHERE id = ?
+                """, (user_id,))
+            
+            user = cursor.fetchone()
+            conn.close()
+            
+            if not user:
+                return jsonify({'success': False, 'message': 'User not found'}), 404
+            
+            # Convert to dictionary with proper keys
+            user_data = {
+                'id': user[0],
+                'fullName': user[1],
+                'email': user[2],
+                'contactNumber': user[3],
+                'address': user[4],
+                'profile_photo_url': user[5],
+                'isVerified': user[6],
+                'verificationStatus': user[7],
+                'createdAt': user[8]
+            }
+            
+            return jsonify({'success': True, 'data': user_data})
+        
+        elif request.method == 'PUT':
+            # Handle PUT request for profile update
+            data = request.get_json()
+            
+            if not data:
+                return jsonify({'success': False, 'message': 'No data provided'}), 400
+            
+            # Get current user data to preserve email
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT email FROM users WHERE id = ?", (data.get('id'),))
+            result = cursor.fetchone()
+            conn.close()
+            
+            if not result:
+                return jsonify({'success': False, 'message': 'User not found'}), 404
+            
+            email = result[0]
+            
+            cursor.execute("""
+                UPDATE users 
+                SET full_name = ?, contact_number = ?, address = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """, (
+                    data.get('full_name', ''),
+                    data.get('contact_number', ''),
+                    data.get('address', ''),
+                    data.get('id')
+                ))
+            conn.commit()
+            conn.close()
+            
+            return jsonify({'success': True, 'message': 'Profile updated successfully'})
+        
+        else:
+            return jsonify({'success': False, 'message': 'Method not allowed'}), 405
+
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
     finally:
-        conn.close()
-
-@app.route('/api/users/profile', methods=['PUT'])
-def update_user_profile():
-    try:
-        data = request.get_json()
-        
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            UPDATE users 
-            SET full_name = ?, contact_number = ?, address = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE email = ?
-        ''', (
-            data.get('full_name', ''),
-            data.get('contact_number', ''),
-            data.get('address', ''),
-            data['email']
-        ))
-        
-        conn.commit()
-        conn.close()
-        
-        return jsonify({'success': True, 'message': 'Profile updated successfully'})
-    except Exception as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
+        if 'conn' in locals():
+            conn.close()
 
 @app.route('/api/users/profile/<email>', methods=['GET'])
 def get_user_profile(email):
