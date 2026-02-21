@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class PermissionService {
   static const String _permissionsRequestedKey = 'permissions_requested';
@@ -11,6 +12,11 @@ class PermissionService {
   }
 
   static Future<bool> _checkPermission(Permission permission) async {
+    // On web, photo permissions are not applicable
+    if (kIsWeb && permission == Permission.photos) {
+      return true; // Assume photos are accessible on web
+    }
+    
     final status = await permission.status;
     return status.isGranted;
   }
@@ -23,11 +29,10 @@ class PermissionService {
       return; // Already requested permissions before
     }
 
-    final permissions = [
-      Permission.camera,
-      Permission.photos,
-      // Removed Permission.storage since we use Base64 encoding
-    ];
+    // On web, skip photo permissions as they're not applicable
+    final permissions = kIsWeb 
+      ? [Permission.camera] // Only request camera on web
+      : [Permission.camera, Permission.photos];
 
     List<String> deniedPermissions = [];
 
@@ -131,11 +136,10 @@ class PermissionService {
   }
 
   static Future<bool> checkAllPermissions() async {
-    final permissions = [
-      Permission.camera,
-      Permission.photos,
-      // Removed Permission.storage since we use Base64 encoding
-    ];
+    // On web, only check camera permissions
+    final permissions = kIsWeb 
+      ? [Permission.camera] 
+      : [Permission.camera, Permission.photos];
 
     for (final permission in permissions) {
       final isGranted = await _checkPermission(permission);
