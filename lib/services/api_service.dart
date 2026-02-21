@@ -693,32 +693,46 @@ class ApiService {
     }
   }
 
-  static Future<Map<String, dynamic>> updateUserProfile(Map<String, dynamic> profileData) async {
-    return await updateProfile(profileData);
-  }
-
-  static Future<Map<String, dynamic>> createVerificationRequest(Map<String, dynamic> verificationData) async {
+  static Future<Map<String, dynamic>> uploadProfilePhoto(XFile image) async {
     try {
-      print('🔍 createVerificationRequest - Sending data: $verificationData');
-      
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/verification-requests'),
-        headers: await getHeaders(),
-        body: json.encode(verificationData),
+      final token = await _getToken();
+      if (token == null) {
+        return {'success': false, 'message': 'No authentication token found'};
+      }
+
+      // Create multipart request for file upload
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$baseUrl/api/users/profile-photo'),
       );
 
-      print('🔍 createVerificationRequest - Response status: ${response.statusCode}');
-      print('🔍 createVerificationRequest - Response body: ${response.body}');
+      // Add image file
+      final imageBytes = await image.readAsBytes();
+      final imageFile = http.MultipartFile.fromBytes(
+        'profile_photo',
+        imageBytes,
+        image.name.split('.').last,
+      );
+      request.files.add(imageFile);
+
+      // Add authentication
+      request.headers.addAll(await getHeaders());
+
+      final response = await request.send();
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        return data;
+        if (data['success'] == true) {
+          return {'success': true, 'photo_url': data['photo_url']};
+        } else {
+          return {'success': false, 'message': data['message'] ?? 'Failed to upload photo'};
+        }
       } else {
-        return {'success': false, 'message': 'Failed to create verification request - HTTP ${response.statusCode}'};
+        return {'success': false, 'message': 'Failed to upload photo'};
       }
     } catch (e) {
-      print('❌ createVerificationRequest error: $e');
-      return {'success': false, 'message': e.toString()};
+      print('❌ uploadProfilePhoto error: $e');
+      return {'success': false, 'message': 'Network error: $e'};
     }
   }
 

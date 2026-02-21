@@ -4,6 +4,7 @@ import '../../../services/auth_api_service.dart';
 import '../../../services/data_service.dart';
 import '../../../services/api_service.dart' as api_service;
 import '../../../utils/debug_logger.dart';
+import '../../../config/app_config.dart';
 
 class ResidentAccountSettingsScreen extends StatefulWidget {
   final Map<String, dynamic>? userData;
