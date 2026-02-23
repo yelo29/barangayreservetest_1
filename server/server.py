@@ -8,6 +8,7 @@ from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import sqlite3
 import json
+import datetime
 from datetime import datetime
 import os
 from config import Config
@@ -108,12 +109,36 @@ def init_db():
 # Initialize database on startup
 init_db()
 
-# Helper function to get database connection
+# Helper function to get database connection with proper error handling
 def get_db_connection():
-    print(f"🔍 DEBUG: Connecting to database at: {Config.DATABASE_PATH}")
-    conn = sqlite3.connect(Config.DATABASE_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    print(f"DEBUG: Connecting to database at: {Config.DATABASE_PATH}")
+    try:
+        conn = sqlite3.connect(Config.DATABASE_PATH, timeout=30.0)  # Add timeout
+        conn.row_factory = sqlite3.Row
+        # Enable WAL mode for better concurrency
+        conn.execute('PRAGMA journal_mode=WAL')
+        return conn
+    except sqlite3.Error as e:
+        print(f"Database connection error: {e}")
+        raise
+
+# Context manager for database operations
+class DatabaseConnection:
+    def __enter__(self):
+        self.conn = get_db_connection()
+        return self.conn
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.conn:
+            try:
+                if exc_type is None:
+                    self.conn.commit()
+                else:
+                    self.conn.rollback()
+                self.conn.close()
+                print("DEBUG: Database connection closed properly")
+            except sqlite3.Error as e:
+                print(f"Error closing database connection: {e}")
 
 # Alias for backward compatibility
 def get_db():
@@ -173,7 +198,7 @@ def get_current_user():
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    cursor.execute('SELECT id, email, full_name, role, verified, verification_type, discount_rate, contact_number, address, profile_photo_url, is_active, email_verified, last_login, created_at, updated_at FROM users WHERE email = ?', (email,))
+    cursor.execute('SELECT id, email, full_name, role, verified, verification_type, discount_rate, contact_number, address, profile_photo, is_active, email_verified, last_login, created_at, updated_at FROM users WHERE email = ?', (email,))
     user = cursor.fetchone()
     
     conn.close()
@@ -191,7 +216,7 @@ def get_current_user():
                 'discount_rate': user[6],
                 'contact_number': user[7],
                 'address': user[8],
-                'profile_photo_url': user[9],
+                'profile_photo': user[9],
                 'is_active': user[10],
                 'email_verified': user[11],
                 'last_login': user[12],
@@ -216,26 +241,40 @@ def get_facilities():
             'data': facilities_list
         })
     except Exception as e:
-        print(f"❌ Facilities endpoint error: {e}")
+        print(f" Facilities endpoint error: {e}")
         return jsonify({
             'success': False,
             'error': str(e)
         }), 500
 
+@app.route('/api/test', methods=['GET'])
+def test_endpoint():
+    print("TEST ENDPOINT CALLED!")
+    return jsonify({
+        'success': True,
+        'message': 'Test endpoint working',
+        'timestamp': str(datetime.now())
+    })
+
 @app.route('/api/bookings', methods=['GET'])
 def get_bookings():
-    print("🔍 BOOKINGS ENDPOINT CALLED!")  # Simple debug test
+    print("BOOKINGS ENDPOINT CALLED!")  # Simple debug test
     user_email = request.args.get('user_email')
     user_role = request.args.get('user_role', 'resident')  # Default to resident for privacy
     exclude_user_role = request.args.get('excludeUserRole', '').lower() == 'true'  # New parameter to exclude user role filtering
     
-    conn = get_db()
-    cursor = conn.cursor()
+    print(f"DEBUG: user_email={user_email}, user_role={user_role}, exclude_user_role={exclude_user_role}")
+    
+    conn = None
+    cursor = None
     
     try:
+        conn = get_db()
+        cursor = conn.cursor()
+        print("DEBUG: Database connection successful")
         if exclude_user_role:
             # Return ALL bookings without any user role filtering (for official use)
-            print("🔍 Returning ALL bookings (excludeUserRole=true)")
+            print("Returning ALL bookings (excludeUserRole=true)")
             bookings = cursor.execute('''
                 SELECT b.id, b.booking_reference, b.user_id, b.facility_id, b.time_slot_id, 
                        b.booking_date, b.start_time, b.end_time, b.duration_hours,
@@ -276,21 +315,73 @@ def get_bookings():
                 result.append(booking_dict)
         elif user_role == 'resident' and user_email:
             # Residents can see all bookings for calendar (but without sensitive details)
+            print(f"DEBUG: Executing resident bookings query for user_email={user_email}")
             bookings = cursor.execute('''
-                SELECT b.*, f.name as facility_name, u.full_name, u.email as user_email, u.verified, u.discount_rate, u.role as user_role
+                SELECT b.id, b.booking_reference, b.user_id, b.facility_id, b.time_slot_id, 
+                       b.booking_date, b.start_time, b.end_time, b.duration_hours,
+                       b.purpose, b.expected_attendees, b.special_requirements,
+                       b.contact_number, b.contact_address, b.base_rate, b.discount_rate,
+                       b.discount_amount, b.downpayment_amount, b.total_amount,
+                       b.receipt_base64, b.receipt_filename, b.receipt_uploaded_at,
+                       b.status, b.priority_level, b.approved_by, b.approved_at,
+                       b.rejection_reason, b.is_competitive, b.competing_booking_ids,
+                       b.competition_resolved, b.created_at, b.updated_at,
+                       f.name as facility_name, u.full_name, u.email as user_email, u.verified, u.discount_rate as user_discount_rate, u.role as user_role
                 FROM bookings b
                 LEFT JOIN facilities f ON b.facility_id = f.id
                 LEFT JOIN users u ON b.user_id = u.id
                 ORDER BY b.booking_date DESC, b.start_time ASC
             ''').fetchall()
             
+            print(f"DEBUG: Found {len(bookings)} bookings")
+            
             # For residents, return only essential booking info (privacy protection)
             result = []
             for booking in bookings:
-                booking_dict = dict(booking)
+                # Create dictionary manually to avoid column name conflicts
+                booking_dict = {
+                    'id': booking[0],
+                    'booking_reference': booking[1],
+                    'user_id': booking[2],
+                    'facility_id': booking[3],
+                    'time_slot_id': booking[4],
+                    'booking_date': booking[5],
+                    'start_time': booking[6],
+                    'end_time': booking[7],
+                    'duration_hours': booking[8],
+                    'purpose': booking[9],
+                    'expected_attendees': booking[10],
+                    'special_requirements': booking[11],
+                    'contact_number': booking[12],
+                    'contact_address': booking[13],
+                    'base_rate': booking[14],
+                    'discount_rate': booking[15],
+                    'discount_amount': booking[16],
+                    'downpayment_amount': booking[17],
+                    'total_amount': booking[18],
+                    'receipt_base64': booking[19],
+                    'receipt_filename': booking[20],
+                    'receipt_uploaded_at': booking[21],
+                    'status': booking[22],
+                    'priority_level': booking[23],
+                    'approved_by': booking[24],
+                    'approved_at': booking[25],
+                    'rejection_reason': booking[26],
+                    'is_competitive': booking[27],
+                    'competing_booking_ids': booking[28],
+                    'competition_resolved': booking[29],
+                    'created_at': booking[30],
+                    'updated_at': booking[31],
+                    'facility_name': booking[32],
+                    'full_name': booking[33],
+                    'user_email': booking[34],
+                    'verified': booking[35],
+                    'user_discount_rate': booking[36],
+                    'user_role': booking[37]
+                }
                 
                 # Debug logging for privacy check
-                print(f"🔍 PRIVACY CHECK: booking_email='{booking_dict['user_email']}' vs user_email='{user_email}'")
+                print(f"PRIVACY CHECK: booking_email='{booking_dict['user_email']}' vs user_email='{user_email}'")
                 
                 # Remove sensitive information for residents (but keep email for official detection)
                 if booking_dict['user_email'] and user_email and booking_dict['user_email'].lower().strip() != user_email.lower().strip():
@@ -314,9 +405,9 @@ def get_bookings():
                         )
                     )
                     
-                    print(f"🔍 PRIVACY APPLIED: Masked booking for user {original_email}")
+                    print(f"PRIVACY APPLIED: Masked booking for user {original_email}")
                 else:
-                    print(f"🔍 PRIVACY NOT APPLIED: User can see full booking details")
+                    print(f"PRIVACY NOT APPLIED: User can see full booking details")
                 
                 result.append(booking_dict)
                 
@@ -339,10 +430,16 @@ def get_bookings():
         })
             
     except Exception as e:
-        print(f"❌ Error in bookings endpoint: {e}")
-        return jsonify({'success': False, 'message': 'Error fetching bookings'}), 500
+        print(f"Error in bookings endpoint: {e}")
+        import traceback
+        print(f"Full traceback: {traceback.format_exc()}")
+        return jsonify({'success': False, 'message': f'Error fetching bookings: {str(e)}'}), 500
     finally:
-        conn.close()
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+        print("DEBUG: Database connection closed")
 
 @app.route('/api/bookings/<int:booking_id>/status', methods=['PUT'])
 def update_booking_status(booking_id):
@@ -371,17 +468,17 @@ def update_booking_status(booking_id):
         
         facility_id, date, timeslot, user_id, current_status = booking
         
-        print(f"🔍 DEBUG: Updating booking {booking_id} from {current_status} to {new_status}")
+        print(f" DEBUG: Updating booking {booking_id} from {current_status} to {new_status}")
         if rejection_reason:
-            print(f"🔍 DEBUG: Rejection reason: {rejection_reason}")
+            print(f" DEBUG: Rejection reason: {rejection_reason}")
         if rejection_type:
-            print(f"🔍 DEBUG: Rejection type: {rejection_type}")
+            print(f" DEBUG: Rejection type: {rejection_type}")
         else:
-            print(f"🔍 DEBUG: Rejection type is NULL or missing")
+            print(f" DEBUG: Rejection type is NULL or missing")
         
         # NEW: Handle violation tracking for fake receipt rejections
         if new_status == 'rejected' and rejection_type == 'fake_receipt':
-            print(f"🚨 VIOLATION DETECTED: Fake receipt rejection for user {user_id}")
+            print(f" VIOLATION DETECTED: Fake receipt rejection for user {user_id}")
             
             # Get current violation count
             cursor.execute('SELECT fake_booking_violations, is_banned FROM users WHERE id = ?', (user_id,))
@@ -411,10 +508,10 @@ def update_booking_status(booking_id):
                         WHERE id = ?
                     ''', (new_violations, user_id))
                     
-                    ban_reason = "Your payment receipt is fake or shown no payment in our payment history/records, ⚠️ know that this violation will be recorded and you will only have three chances before getting your account banned! This is your 3rd violation - your account has been permanently banned."
+                    ban_reason = "Your payment receipt is fake or shown no payment in our payment history/records,  know that this violation will be recorded and you will only have three chances before getting your account banned! This is your 3rd violation - your account has been permanently banned."
                     
                 else:
-                    print(f"⚠️ WARNING: User {user_id} now has {new_violations}/3 violations")
+                    print(f" WARNING: User {user_id} now has {new_violations}/3 violations")
                     
                     # Update violation count
                     cursor.execute('''
@@ -424,14 +521,14 @@ def update_booking_status(booking_id):
                     ''', (new_violations, user_id))
                     
                     remaining_chances = 3 - new_violations
-                    ban_reason = f"Your payment receipt is fake or shown no payment in our payment history/records, ⚠️ know that this violation will be recorded and you will only have {remaining_chances} chance{'s' if remaining_chances > 1 else ''} remaining before getting your account banned!"
+                    ban_reason = f"Your payment receipt is fake or shown no payment in our payment history/records,  know that this violation will be recorded and you will only have {remaining_chances} chance{'s' if remaining_chances > 1 else ''} remaining before getting your account banned!"
                 
                 # Update rejection reason with violation warning
                 rejection_reason = ban_reason
                 
-                print(f"📝 Updated rejection reason with violation warning")
+                print(f" Updated rejection reason with violation warning")
         else:
-            print(f"🔍 DEBUG: Skipping violation tracking - status: {new_status}, type: {rejection_type}")
+            print(f" DEBUG: Skipping violation tracking - status: {new_status}, type: {rejection_type}")
         
         # Update the booking status and rejection reason
         if rejection_reason and new_status == 'rejected':
@@ -440,18 +537,18 @@ def update_booking_status(booking_id):
                 SET status = ?, rejection_reason = ?, rejection_type = ?
                 WHERE id = ?
             ''', (new_status, rejection_reason, rejection_type, booking_id))
-            print(f"🔍 DEBUG: Updated booking {booking_id} with rejection reason and type")
+            print(f" DEBUG: Updated booking {booking_id} with rejection reason and type")
         else:
             cursor.execute('''
                 UPDATE bookings 
                 SET status = ?, rejection_type = ?
                 WHERE id = ?
             ''', (new_status, rejection_type, booking_id))
-            print(f"🔍 DEBUG: Updated booking {booking_id} status and type")
+            print(f" DEBUG: Updated booking {booking_id} status and type")
         
         # If approving, automatically reject other pending bookings for the same time slot
         if new_status == 'approved' and current_status == 'pending':
-            print(f"🏆 Approving booking {booking_id} and rejecting competitors for {facility_id} {date} {timeslot}")
+            print(f" Approving booking {booking_id} and rejecting competitors for {facility_id} {date} {timeslot}")
             
             cursor.execute('''
                 UPDATE bookings 
@@ -463,22 +560,19 @@ def update_booking_status(booking_id):
             rejected_count = cursor.rowcount
             print(f"🚫 Auto-rejected {rejected_count} competing bookings")
         
-        conn.commit()
-        conn.close()
-        
         return jsonify({'success': True, 'message': f'Booking {new_status} successfully'})
-        
+            
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
 @app.route('/api/bookings', methods=['POST'])
 def create_booking():
     data = request.json
-    print(f"🔍 DEBUG: create_booking called with data: {data}")
-    print(f"🔍 DEBUG: receipt_base64 in data: {'receipt_base64' in data}")
+    print(f"DEBUG: create_booking called with data: {data}")
+    print(f"DEBUG: receipt_base64 in data: {'receipt_base64' in data}")
     if 'receipt_base64' in data:
-        print(f"🔍 DEBUG: receipt_base64 length: {len(str(data['receipt_base64']))}")
-        print(f"🔍 DEBUG: receipt_base64 starts with data:image: {str(data['receipt_base64']).startswith('data:image')}")
+        print(f"DEBUG: receipt_base64 length: {len(str(data['receipt_base64']))}")
+        print(f"DEBUG: receipt_base64 starts with data:image: {str(data['receipt_base64']).startswith('data:image')}")
     
     # Validate required fields
     required_fields = ['facility_id', 'user_email', 'date', 'timeslot']
@@ -486,77 +580,69 @@ def create_booking():
         if field not in data:
             return jsonify({'success': False, 'message': f'Missing required field: {field}'}), 400
     
-    conn = get_db()
-    cursor = conn.cursor()
+    # Initialize variables to avoid scope issues
+    booking_status = 'pending'
+    rejected_resident_bookings = []
     
     try:
-        print(f"🔍 DEBUG: Database path: {Config.DATABASE_PATH}")
-        
-        # Get user_id from email
-        cursor.execute('SELECT id, role, is_banned, ban_reason FROM users WHERE email = ?', (data['user_email'],))
-        user_result = cursor.fetchone()
-        
-        if not user_result:
-            return jsonify({'success': False, 'message': 'User not found'}), 404
-        
-        user_id = user_result[0]
-        user_role = user_result[1]
-        is_banned = user_result[2]
-        ban_reason = user_result[3]
-        
-        # 🔒 BAN VALIDATION: Check if user is banned
-        if is_banned:
-            print(f"🚨 BANNED USER ATTEMPTED BOOKING: {data['user_email']} - Reason: {ban_reason}")
-            return jsonify({
-                'success': False, 
-                'message': 'Account is banned. Cannot create bookings.',
-                'error_type': 'user_banned',
-                'ban_reason': ban_reason or 'Account has been banned by administrator.'
-            }), 403
-        
-        print(f"🔍 DEBUG: Found user_id: {user_id}, role: {user_role}, banned: {is_banned} for email: {data['user_email']}")
-        
-        # Check if this is an official booking
-        is_official_booking = user_role == 'official'
-        print(f"🔍 DEBUG: Is official booking: {is_official_booking}")
-        print(f"🔍 DEBUG: User role: {user_role}")
-        print(f"🔍 DEBUG: User email: {data['user_email']}")
-        print(f"🔍 DEBUG: Timeslot: {data['timeslot']}")
-        
-        # Check if USER already has this exact time slot (prevent duplicate user bookings)
-        cursor.execute('''
-            SELECT id, user_id, status FROM bookings 
-            WHERE facility_id = ? AND booking_date = ? AND start_time = ? AND user_id = ?
-        ''', (data['facility_id'], data['date'], data['timeslot'], user_id))
-        
-        user_existing_booking = cursor.fetchone()
-        
-        # If user already has this exact time slot, block it
-        if user_existing_booking:
-            return jsonify({
-                'success': False, 
-                'message': 'You already have a booking for this time slot. Please choose a different time.',
-                'error_type': 'duplicate_user_booking'
-            }), 409
-        
-        # AUTO-REJECTION LOGIC FOR OFFICIAL BOOKINGS
-        rejected_resident_bookings = []
-        if is_official_booking:
-            print(f"🏆 OFFICIAL BOOKING DETECTED - Checking for resident bookings (pending + approved) for time slot {data['timeslot']}...")
-            print(f"🔍 DEBUG: Auto-rejection logic triggered for timeslot: {data['timeslot']}")
+        with DatabaseConnection() as conn:
+            cursor = conn.cursor()
+            print(f"DEBUG: Database path: {Config.DATABASE_PATH}")
             
-            # Find resident bookings (pending AND approved) that overlap with this time slot
-            print(f"🔍 DEBUG: Timeslot value: '{data['timeslot']}' (type: {type(data['timeslot'])})")
-            print(f"🔍 DEBUG: Timeslot == 'ALL DAY': {data['timeslot'] == 'ALL DAY'}")
+            # Get user_id from email
+            cursor.execute('SELECT id, role, is_banned, ban_reason FROM users WHERE email = ?', (data['user_email'],))
+            user_result = cursor.fetchone()
             
-            # Check if this is an ALL DAY booking (handle potential string concatenation issues)
-            is_all_day = data['timeslot'] == 'ALL DAY' or data['timeslot'].startswith('ALL DAY')
-            print(f"🔍 DEBUG: is_all_day: {is_all_day}")
+            if not user_result:
+                return jsonify({'success': False, 'message': 'User not found'}), 404
             
-            if is_all_day:
+            user_id = user_result[0]
+            user_role = user_result[1]
+            is_banned = user_result[2]
+            ban_reason = user_result[3]
+        
+        # BAN VALIDATION: Check if user is banned
+            if is_banned:
+                print(f"BANNED USER ATTEMPTED BOOKING: {data['user_email']} - Reason: {ban_reason}")
+                return jsonify({
+                    'success': False, 
+                    'message': 'Account is banned. Cannot create bookings.',
+                    'error_type': 'user_banned',
+                    'ban_reason': ban_reason or 'Account has been banned by administrator.'
+                }), 403
+        
+            print(f"DEBUG: Found user_id: {user_id}, role: {user_role}, banned: {is_banned} for email: {data['user_email']}")
+            
+            # Check if this is an official booking
+            is_official_booking = user_role == 'official'
+            print(f"DEBUG: Is official booking: {is_official_booking}")
+            print(f"DEBUG: User role: {user_role}")
+            print(f"DEBUG: User email: {data['user_email']}")
+            print(f"DEBUG: Timeslot: {data['timeslot']}")
+            
+            # Check if USER already has this exact time slot (prevent duplicate user bookings)
+            cursor.execute('''
+                SELECT id, user_id, status FROM bookings 
+                WHERE facility_id = ? AND booking_date = ? AND start_time = ? AND user_id = ?
+            ''', (data['facility_id'], data['date'], data['timeslot'], user_id))
+            
+            user_existing_booking = cursor.fetchone()
+            
+            # If user already has this exact time slot, block it
+            if user_existing_booking:
+                return jsonify({
+                    'success': False, 
+                    'message': 'You already have a booking for this time slot. Please choose a different time.',
+                    'error_type': 'duplicate_user_booking'
+                }), 409
+        
+        # AUTO-REJECTION LOGIC FOR OFFICIAL BOOKINGS (inside context manager)
+            if is_official_booking and (data['timeslot'] == 'ALL DAY' or data['timeslot'].startswith('ALL DAY')):
+                print(f"DEBUG: OFFICIAL BOOKING DETECTED - Checking for resident bookings (pending + approved) for time slot {data['timeslot']}...")
+                
                 # For ALL DAY bookings, find ALL resident bookings on this date
-                print(f"🔍 DEBUG: ALL DAY query - facility_id: {data['facility_id']}, date: {data['date']}, user_id: {user_id}")
-                cursor.execute('''
+                print(f" DEBUG: ALL DAY query - facility_id: {data['facility_id']}, date: {data['date']}, user_id: {user_id}")
+                cursor.execute("""
                     SELECT b.id, b.user_id, b.start_time, b.end_time, b.status, u.email as user_email, u.full_name
                     FROM bookings b
                     LEFT JOIN users u ON b.user_id = u.id
@@ -565,26 +651,13 @@ def create_booking():
                     AND (b.status = 'pending' OR b.status = 'approved')
                     AND (u.role = 'resident' OR u.role = '0' OR u.role IS NULL OR u.role LIKE '0.%')
                     AND b.user_id != ?
-                ''', (data['facility_id'], data['date'], user_id))
-            else:
-                # For specific time slots, find exact matches
-                cursor.execute('''
-                    SELECT b.id, b.user_id, b.start_time, b.end_time, b.status, u.email as user_email, u.full_name
-                    FROM bookings b
-                    LEFT JOIN users u ON b.user_id = u.id
-                    WHERE b.facility_id = ? 
-                    AND b.booking_date = ? 
-                    AND b.start_time = ?
-                    AND (b.status = 'pending' OR b.status = 'approved')
-                    AND (u.role = 'resident' OR u.role = '0' OR u.role IS NULL OR u.role LIKE '0.%')
-                    AND b.user_id != ?
-                ''', (data['facility_id'], data['date'], data['timeslot'], user_id))
-            
-            overlapping_bookings = cursor.fetchall()
-            print(f"🔍 DEBUG: Found {len(overlapping_bookings)} overlapping resident bookings")
-            
-            # Auto-reject overlapping resident bookings with apology message
-            apology_message = """Dear Resident,
+                """, (data['facility_id'], data['date'], user_id))
+                
+                overlapping_bookings = cursor.fetchall()
+                print(f"DEBUG: Found {len(overlapping_bookings)} overlapping resident bookings")
+                
+                # Auto-reject overlapping resident bookings with apology message
+                apology_message = """Dear Resident,
 
 We apologize but your booking has been automatically cancelled due to an official Barangay Event.
 
@@ -592,61 +665,68 @@ Your payment will be refunded within 3-5 business days.
 
 Please check your SMS and Email for more Updates.
 
-Thank you for your understanding and cooperation.
+Thank you for Your understanding and cooperation.
 
 Barangay Management"""
+                
+                for booking in overlapping_bookings:
+                    # Extract resident booking info
+                    booking_id = booking[0]
+                    resident_email = booking[5] if booking[5] else 'Unknown'
+                    
+                    print(f"DEBUG: Auto-rejecting resident booking {booking_id} for {resident_email}")
+                    
+                    # Update resident booking to rejected with apology
+                    cursor.execute("""
+                        UPDATE bookings 
+                        SET status = 'rejected', 
+                            rejection_reason = ?,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                    """, (apology_message, booking_id))
+                    
+                    rejected_resident_bookings.append({
+                        'booking_id': booking_id,
+                        'resident_name': booking[6] if len(booking) > 6 else 'Resident',
+                        'resident_email': resident_email,
+                        'timeslot': booking[2],  # Use resident's actual time slot
+                        'rejection_reason': apology_message
+                    })
+                
+                print(f"DEBUG: Auto-rejected {len(rejected_resident_bookings)} resident bookings")
             
-            for booking in overlapping_bookings:
-                # Extract resident booking info
-                booking_id = booking[0]
-                resident_email = booking[5] if booking[5] else 'Unknown'
-                resident_name = booking[6] if booking[6] else 'Resident'
-                resident_timeslot = booking[2]  # Use just the start_time (already contains full timeslot)
-                resident_status = booking[4]  # Get original status (pending/approved)
-                
-                print(f"🚫 AUTO-REJECTING {resident_status.upper()} booking {booking_id} for {resident_name} ({resident_email}) - Time: {resident_timeslot}")
-                
-                # Update resident booking to rejected with apology
-                cursor.execute('''
-                    UPDATE bookings 
-                    SET status = 'rejected', 
-                        rejection_reason = ?,
-                        updated_at = CURRENT_TIMESTAMP
-                    WHERE id = ?
-                ''', (apology_message, booking_id))
-                
-                rejected_resident_bookings.append({
-                    'booking_id': booking_id,
-                    'resident_name': resident_name,
-                    'resident_email': resident_email,
-                    'timeslot': resident_timeslot  # Use resident's actual time slot
-                })
+            # Check if user has too many pending bookings
+            cursor.execute('''
+                SELECT COUNT(*) FROM bookings 
+                WHERE user_id = ? AND status = 'pending'
+            ''', (user_id,))
             
-            if rejected_resident_bookings:
-                print(f"✅ Auto-rejected {len(rejected_resident_bookings)} resident bookings")
+            pending_count = cursor.fetchone()[0]
+            if pending_count >= 5:  # Limit to 5 pending bookings per user
+                return jsonify({
+                    'success': False, 
+                    'message': 'You have too many pending bookings. Please wait for approval or cancel some bookings.',
+                    'error_type': 'too_many_pending'
+                }), 429
         
-        # Check if user has too many pending bookings (optional limit)
-        cursor.execute('''
-            SELECT COUNT(*) FROM bookings 
-            WHERE user_id = ? AND status = 'pending'
-        ''', (user_id,))
-        
-        pending_count = cursor.fetchone()[0]
-        if pending_count >= 5:  # Limit to 5 pending bookings per user
-            return jsonify({
-                'success': False, 
-                'message': 'You have too many pending bookings. Please wait for approval or cancel some bookings.',
-                'error_type': 'too_many_pending'
-            }), 429
-        
-        # ALLOW multiple users to book same time slot (competitive booking)
-        # No need to check if other users have this slot - that's the point!
-        
-        # Create booking
-        booking_status = 'approved' if is_official_booking else data.get('status', 'pending')
-        print(f"🔍 DEBUG: Setting booking status to: {booking_status}")
-        
-        cursor.execute('''
+            # TRADITIONAL BOOKING: Check if slot is already taken by ANY user
+            cursor.execute("SELECT id, user_id, status FROM bookings WHERE facility_id = ? AND booking_date = ? AND start_time = ? AND status IN ('pending', 'approved')", (data['facility_id'], data['date'], data['timeslot']))
+            
+            existing_booking = cursor.fetchone()
+            
+            # If ANY user has this slot (pending or approved), block it
+            if existing_booking:
+                return jsonify({
+                    'success': False, 
+                    'message': 'This time slot is already booked. Please choose a different time.',
+                    'error_type': 'slot_already_booked'
+                }), 409
+            
+            # Create booking
+            booking_status = 'approved' if is_official_booking else 'pending'
+            print(f"DEBUG: Setting booking status to: {booking_status}")
+            
+            cursor.execute('''
             INSERT INTO bookings (facility_id, user_id, booking_date, start_time, end_time, status, purpose, total_amount, contact_number, contact_address, booking_reference, time_slot_id, duration_hours, base_rate, downpayment_amount, receipt_base64)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
@@ -669,13 +749,12 @@ Barangay Management"""
         ))
         
         booking_id = cursor.lastrowid
-        conn.commit()
         
         # Debug: Check if receipt was saved
         if data.get('receipt_base64'):
-            print(f"✅ RECEIPT SAVED: receipt_base64 length = {len(str(data['receipt_base64']))} for booking {booking_id}")
+            print(f"RECEIPT SAVED: receipt_base64 length = {len(str(data['receipt_base64']))} for booking {booking_id}")
         else:
-            print(f"⚠️ NO RECEIPT: receipt_base64 is null for booking {booking_id}")
+            print(f"NO RECEIPT: receipt_base64 is null for booking {booking_id}")
         
         # Prepare response message
         response_message = 'Booking submitted successfully!' if not is_official_booking else 'Official booking created successfully!'
@@ -691,115 +770,87 @@ Barangay Management"""
             'rejected_resident_bookings': rejected_resident_bookings,
             'note': 'Multiple users may book the same time slot. First approved booking wins!' if not is_official_booking else 'Official bookings take priority over resident bookings.'
         })
-        
+            
     except Exception as e:
-        conn.rollback()
+        print(f"Error in create_booking: {e}")
+        import traceback
+        print(f"Full traceback: {traceback.format_exc()}")
         return jsonify({'success': False, 'message': str(e)}), 500
-    finally:
-        conn.close()
 
 @app.route('/api/available-timeslots', methods=['GET'])
 def get_available_timeslots():
-    """Get available time slots for a specific facility and date (competitive booking)"""
+    """Get available time slots for a specific facility and date (traditional booking)"""
     facility_id = request.args.get('facility_id')
     date = request.args.get('date')
-    user_email = request.args.get('user_email')  # Optional: for user-specific availability
-    
-    print(f"🔍 DEBUG: Available timeslots request - facility_id: {facility_id}, date: {date}, user_email: {user_email}")
+    user_email = request.args.get('user_email')
     
     if not facility_id or not date:
         return jsonify({'success': False, 'message': 'facility_id and date are required'}), 400
     
-    conn = get_db()
-    
     try:
-        # Get all time slots from database for this facility
-        cursor = conn.cursor()
-        cursor.execute('''
-            SELECT start_time, end_time FROM time_slots 
-            WHERE facility_id = ? 
-            ORDER BY sort_order
-        ''', (facility_id,))
-        
-        time_slots_db = cursor.fetchall()
-        
-        # Convert to format expected by frontend
-        all_timeslots = []
-        for start_time, end_time in time_slots_db:
-            # Just use the format "6:00 AM - 8:00 AM" as is
-            timeslot_str = f"{start_time} - {end_time}"
-            all_timeslots.append(timeslot_str)
-        
-        print(f"🔍 DEBUG: Found {len(all_timeslots)} time slots for facility {facility_id}")
-        
-        # Get all bookings for this facility and date (excluding rejected)
-        cursor.execute('''
-            SELECT start_time, user_id, status FROM bookings 
-            WHERE facility_id = ? AND booking_date = ? AND status != 'rejected'
-        ''', (facility_id, date))
-        
-        all_bookings = cursor.fetchall()
-        print(f"🔍 DEBUG: Found {len(all_bookings)} bookings for this facility/date")
-        for booking in all_bookings:
-            print(f"🔍 DEBUG: Booking - timeslot: {booking[0]}, user: {booking[1]}, status: {booking[2]}")
-        
-        # Categorize time slots for competitive booking
-        available_slots = []
-        user_booked_slots = []
-        competitive_slots = []  # Slots with multiple bookings
-        approved_slots = []      # Slots that are already taken (approved)
-        
-        for timeslot in all_timeslots:
-            bookings_for_slot = [b for b in all_bookings if b[0] == timeslot]
+        with DatabaseConnection() as conn:
+            cursor = conn.cursor()
             
-            if not bookings_for_slot:
-                # No bookings for this slot
-                available_slots.append(timeslot)
-                print(f"🔍 DEBUG: {timeslot} -> available (no bookings)")
-            else:
-                # NEW LOGIC: Check if ANY resident has booking (pending or approved)
-                has_any_booking = any(b[2] in ['approved', 'pending'] for b in bookings_for_slot)
+            # Get all time slots
+            cursor.execute('SELECT start_time, end_time FROM time_slots WHERE facility_id = ? ORDER BY sort_order', (facility_id,))
+            time_slots_db = cursor.fetchall()
+            
+            all_timeslots = []
+            for start_time, end_time in time_slots_db:
+                clean_start = str(start_time).replace('at character 1', '').strip()
+                clean_end = str(end_time).replace('at character 1', '').strip()
+                timeslot_str = f"{clean_start} - {clean_end}"
+                all_timeslots.append(timeslot_str)
+            
+            # Get all bookings
+            cursor.execute("SELECT start_time, user_id, status FROM bookings WHERE facility_id = ? AND booking_date = ? AND status != 'rejected'", (facility_id, date))
+            all_bookings = cursor.fetchall()
+            
+            # Categorize slots
+            available_slots = []
+            user_pending_slots = []
+            user_approved_slots = []
+            other_booked_slots = []
+            
+            for timeslot in all_timeslots:
+                bookings_for_slot = [b for b in all_bookings if b[0] == timeslot]
                 
-                if has_any_booking:
-                    # Lock timeslot if any resident has booking (prevents competitive booking)
-                    user_booked_slots.append(timeslot)
-                    print(f"🔍 DEBUG: {timeslot} -> locked (resident has booking)")
-                elif len(bookings_for_slot) > 1:
-                    # Multiple pending bookings - competitive!
-                    competitive_slots.append(timeslot)
-                    print(f"🔍 DEBUG: {timeslot} -> competitive (multiple pending)")
+                if not bookings_for_slot:
+                    available_slots.append(timeslot)
                 else:
-                    # Single booking - put in user_booked_slots regardless of user (prevents competitive booking)
-                    user_booked_slots.append(timeslot)
-                    print(f"🔍 DEBUG: {timeslot} -> user booked (any resident)")
+                    # Check if current user has this booking
+                    user_booking = None
+                    for booking in bookings_for_slot:
+                        booking_user_id = booking[1]
+                        cursor.execute('SELECT email FROM users WHERE id = ?', (booking_user_id,))
+                        user_result = cursor.fetchone()
+                        booking_user_email = user_result[0] if user_result else None
+                        
+                        if user_email and booking_user_email == user_email:
+                            user_booking = booking
+                            break
                     
-                    # Optional: Still track if it's current user for UI purposes
-                    if user_email and bookings_for_slot[0][1] == user_email:
-                        print(f"🔍 DEBUG: {timeslot} -> current user's booking")
+                    if user_booking:
+                        if user_booking[2] == 'pending':
+                            user_pending_slots.append(timeslot)
+                        elif user_booking[2] == 'approved':
+                            user_approved_slots.append(timeslot)
                     else:
-                        print(f"🔍 DEBUG: {timeslot} -> other resident's booking")
-        
-        print(f"🔍 DEBUG: Final counts - available: {len(available_slots)}, user_booked: {len(user_booked_slots)}, competitive: {len(competitive_slots)}, approved: {len(approved_slots)}")
-        
-        return jsonify({
-            'success': True,
-            'default_timeslots': all_timeslots,  # Changed from available_timeslots to default_timeslots
-            'available_timeslots': available_slots,
-            'user_booked_timeslots': user_booked_slots,
-            'competitive_timeslots': competitive_slots,  # Slots with any resident booking
-            'approved_timeslots': approved_slots,        # Already taken slots
-            'total_available': len(available_slots),
-            'competitive_count': len(competitive_slots),
-            'date': date,
-            'facility_id': facility_id,
-            'note': 'Time slots are locked when any resident has a booking. First resident to book gets the slot!'
-        })
-        
+                        other_booked_slots.append(timeslot)
+            
+            return jsonify({
+                'success': True,
+                'default_timeslots': all_timeslots,
+                'available_timeslots': available_slots,
+                'user_pending_timeslots': user_pending_slots,
+                'user_approved_timeslots': user_approved_slots,
+                'other_booked_timeslots': other_booked_slots,
+                'total_available': len(available_slots),
+                'note': 'Traditional booking: First resident to book gets the slot!'
+            })
+            
     except Exception as e:
-        print(f"❌ Error in get_available_timeslots: {e}")
         return jsonify({'success': False, 'message': str(e)}), 500
-    finally:
-        conn.close()
 
 @app.route('/api/auth/logout', methods=['POST'])
 def logout():
@@ -815,12 +866,13 @@ def logout():
 
 @app.route('/api/auth/login', methods=['POST'])
 def login():
+    print("DEBUG: Login endpoint called with updated code!")
     data = request.json
     
     try:
         conn = get_db()
         user = conn.execute(
-            'SELECT id, email, password_hash, full_name, role, verified, verification_type, discount_rate, contact_number, address, profile_photo_url, is_active, email_verified, last_login, created_at, updated_at, fake_booking_violations, is_banned, banned_at, ban_reason FROM users WHERE email = ?',
+            'SELECT id, email, password_hash, full_name, role, verified, verification_type, discount_rate, contact_number, address, profile_photo, is_active, email_verified, last_login, created_at, updated_at, fake_booking_violations, is_banned, banned_at, ban_reason FROM users WHERE email = ?',
             (data['email'],)
         ).fetchone()
         
@@ -837,7 +889,7 @@ def login():
                 'discount_rate': user[7],
                 'contact_number': user[8],
                 'address': user[9],
-                'profile_photo_url': user[10],
+                'profile_photo': user[10],
                 'is_active': user[11],
                 'email_verified': user[12],
                 'last_login': user[13],
@@ -885,7 +937,7 @@ def login():
                         'discount_rate': user_dict['discount_rate'],
                         'contact_number': user_dict['contact_number'],
                         'address': user_dict['address'],
-                        'profile_photo_url': user_dict['profile_photo_url'],
+                        'profile_photo': user_dict['profile_photo'],
                         'is_active': user_dict['is_active'],
                         'email_verified': user_dict['email_verified'],
                         'last_login': user_dict['last_login'],
@@ -911,7 +963,7 @@ def login():
             }), 404
             
     except Exception as e:
-        print(f"❌ Login error: {e}")
+        print(f" Login error: {e}")
         return jsonify({
             'success': False,
             'message': f'Login failed: {str(e)}'
@@ -921,10 +973,9 @@ def login():
 def register():
     data = request.json
     
-    conn = get_db()
-    cursor = conn.cursor()
-    
     try:
+        with DatabaseConnection() as conn:
+            cursor = conn.cursor()
         # NEW: Check if email is banned before allowing registration
         cursor.execute('SELECT is_banned, ban_reason FROM users WHERE email = ?', (data['email'],))
         banned_user = cursor.fetchone()
@@ -976,7 +1027,7 @@ def register():
             }
         })
     except Exception as e:
-        print(f"❌ Registration error: {e}")
+        print(f" Registration error: {e}")
         conn.close()
         return jsonify({
             'success': False,
@@ -1085,7 +1136,7 @@ def create_facility():
         ))
         
         facility_id = cursor.lastrowid
-        print(f"🔍 Created facility {facility_id}: {data['name']}")
+        print(f" Created facility {facility_id}: {data['name']}")
         
         # Generate default time slots for the new facility
         # Default operating hours: 8:00 AM to 9:00 PM (can be customized per facility type)
@@ -1104,7 +1155,7 @@ def create_facility():
         elif 'shooting' in facility_name or 'range' in facility_name:
             start_hour, end_hour = 6, 22  # 6 AM to 9 PM (updated to match other facilities)
         
-        print(f"🔍 Generating time slots for facility {facility_id}: {start_hour}:00 to {end_hour}:00")
+        print(f" Generating time slots for facility {facility_id}: {start_hour}:00 to {end_hour}:00")
         
         # Generate time slots (2-hour slots for better management)
         time_slots = []
@@ -1121,7 +1172,7 @@ def create_facility():
             VALUES (?, ?, ?, ?, ?)
         ''', time_slots)
         
-        print(f"🔍 Created {len(time_slots)} time slots for facility {facility_id}")
+        print(f" Created {len(time_slots)} time slots for facility {facility_id}")
         
         conn.commit()
         conn.close()
@@ -1134,7 +1185,7 @@ def create_facility():
         })
         
     except Exception as e:
-        print(f"❌ create_facility error: {e}")
+        print(f" create_facility error: {e}")
         return jsonify({'success': False, 'message': str(e)})
 
 @app.route('/api/facilities/<int:facility_id>/regenerate-timeslots', methods=['POST'])
@@ -1152,12 +1203,12 @@ def regenerate_facility_timeslots(facility_id):
             return jsonify({'success': False, 'message': 'Facility not found'}), 404
         
         facility_name = facility[0]
-        print(f"🔍 Regenerating time slots for facility {facility_id}: {facility_name}")
+        print(f" Regenerating time slots for facility {facility_id}: {facility_name}")
         
         # Delete existing time slots for this facility
         cursor.execute('DELETE FROM time_slots WHERE facility_id = ?', (facility_id,))
         deleted_count = cursor.rowcount
-        print(f"🔍 Deleted {deleted_count} existing time slots")
+        print(f" Deleted {deleted_count} existing time slots")
         
         # Determine operating hours based on facility type
         facility_name_lower = facility_name.lower()
@@ -1185,7 +1236,7 @@ def regenerate_facility_timeslots(facility_id):
             VALUES (?, ?, ?, ?, ?)
         ''', time_slots)
         
-        print(f"🔍 Created {len(time_slots)} new time slots for facility {facility_id}")
+        print(f" Created {len(time_slots)} new time slots for facility {facility_id}")
         
         conn.commit()
         conn.close()
@@ -1198,7 +1249,7 @@ def regenerate_facility_timeslots(facility_id):
         })
         
     except Exception as e:
-        print(f"❌ regenerate_timeslots error: {e}")
+        print(f" regenerate_timeslots error: {e}")
         return jsonify({'success': False, 'message': str(e)})
 
 @app.route('/api/facilities/<int:facility_id>', methods=['PUT'])
@@ -1275,7 +1326,7 @@ def get_user_by_id(user_id):
                     'verified': user[7],
                     'discount_rate': user[8],
                     'address': user[9],
-                    'profile_photo_url': user[10],
+                    'profile_photo': user[10],
                     'is_authenticated': True
                 }
             })
@@ -1297,12 +1348,13 @@ def update_user_profile():
         
         cursor.execute('''
             UPDATE users 
-            SET full_name = ?, contact_number = ?, address = ?, updated_at = CURRENT_TIMESTAMP
+            SET full_name = ?, contact_number = ?, address = ?, profile_photo = ?, updated_at = CURRENT_TIMESTAMP
             WHERE email = ?
         ''', (
             data.get('full_name', ''),
             data.get('contact_number', ''),
             data.get('address', ''),
+            data.get('profile_photo', None),
             data['email']
         ))
         
@@ -1313,6 +1365,57 @@ def update_user_profile():
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
+@app.route('/api/users/profile-photo', methods=['POST'])
+def upload_profile_photo():
+    try:
+        if 'photo' not in request.files:
+            return jsonify({'success': False, 'message': 'No photo file provided'}), 400
+        
+        file = request.files['photo']
+        email = request.form.get('email')
+        
+        if not email:
+            return jsonify({'success': False, 'message': 'Email is required'}), 400
+        
+        if file.filename == '':
+            return jsonify({'success': False, 'message': 'No photo file selected'}), 400
+        
+        # Validate file type
+        allowed_extensions = {'png', 'jpg', 'jpeg', 'gif'}
+        if not ('.' in file.filename and 
+                file.filename.rsplit('.', 1)[1].lower() in allowed_extensions):
+            return jsonify({'success': False, 'message': 'Invalid file type. Only PNG, JPG, JPEG, GIF allowed'}), 400
+        
+        # Save file
+        filename = f"{email}_{file.filename}"
+        filepath = os.path.join('uploads/profiles', filename)
+        
+        # Create directory if it doesn't exist
+        os.makedirs('uploads/profiles', exist_ok=True)
+        
+        file.save(filepath)
+        
+        # Update database with photo path
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE users 
+            SET profile_photo = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE email = ?
+        ''', (filepath, email))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'success': True, 
+            'message': 'Profile photo uploaded successfully',
+            'photo_path': filepath
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
 @app.route('/api/users/profile/<email>', methods=['GET'])
 def get_user_profile(email):
     try:
@@ -1320,7 +1423,7 @@ def get_user_profile(email):
         cursor = conn.cursor()
         
         cursor.execute('''
-            SELECT id, email, full_name, contact_number, address, role, verified, discount_rate, created_at, fake_booking_violations, is_banned, banned_at, ban_reason
+            SELECT id, email, full_name, contact_number, address, role, verified, discount_rate, created_at, fake_booking_violations, is_banned, banned_at, ban_reason, profile_photo
             FROM users 
             WHERE email = ?
         ''', (email,))
@@ -1344,7 +1447,8 @@ def get_user_profile(email):
                     'fake_booking_violations': user[9] if len(user) > 9 else 0,
                     'is_banned': user[10] if len(user) > 10 else False,
                     'banned_at': user[11] if len(user) > 11 else None,
-                    'ban_reason': user[12] if len(user) > 12 else None
+                    'ban_reason': user[12] if len(user) > 12 else None,
+                    'profile_photo': user[13] if len(user) > 13 else None
                 }
             })
         else:
@@ -1471,7 +1575,7 @@ def get_user_status(email):
         })
         
     except Exception as e:
-        print(f"❌ Error getting user status: {e}")
+        print(f" Error getting user status: {e}")
         return jsonify({'success': False, 'message': str(e)}), 500
     finally:
         if 'conn' in locals():
@@ -1522,7 +1626,7 @@ def verification_requests():
             })
             
         except Exception as e:
-            print(f"❌ Error fetching verification requests: {e}")
+            print(f" Error fetching verification requests: {e}")
             # Ensure database connection is closed on error
             if 'conn' in locals():
                 try:
@@ -1535,17 +1639,17 @@ def verification_requests():
         conn = None
         try:
             data = request.get_json()
-            print(f"🔍 Received verification request data: {data}")
+            print(f" Received verification request data: {data}")
             
             # Validate required fields
             if not data.get('residentId') or not data.get('verificationType'):
-                print("❌ Validation failed: Missing residentId or verificationType")
+                print(" Validation failed: Missing residentId or verificationType")
                 return jsonify({'success': False, 'message': 'User ID and verification type are required'})
             
             conn = get_db_connection()
             cursor = conn.cursor()
             
-            # 🔒 BAN VALIDATION: Check if user is banned before allowing verification request
+            #  BAN VALIDATION: Check if user is banned before allowing verification request
             cursor.execute('SELECT email, is_banned, ban_reason FROM users WHERE id = ?', (data.get('residentId'),))
             user_result = cursor.fetchone()
             
@@ -1557,7 +1661,7 @@ def verification_requests():
             ban_reason = user_result[2]
             
             if is_banned:
-                print(f"🚨 BANNED USER ATTEMPTED VERIFICATION REQUEST: {user_email} - Reason: {ban_reason}")
+                print(f" BANNED USER ATTEMPTED VERIFICATION REQUEST: {user_email} - Reason: {ban_reason}")
                 return jsonify({
                     'success': False, 
                     'message': 'Account is banned. Cannot submit verification requests.',
@@ -1565,7 +1669,7 @@ def verification_requests():
                     'ban_reason': ban_reason or 'Account has been banned by administrator.'
                 }), 403
             
-            print(f"🔍 DEBUG: Verification request for user: {user_email}, banned: {is_banned}")
+            print(f" DEBUG: Verification request for user: {user_email}, banned: {is_banned}")
             
             # Insert new verification request
             cursor.execute('''
@@ -1596,11 +1700,11 @@ def verification_requests():
             conn.commit()
             conn.close()
             
-            print("✅ Verification request created successfully")
+            print(" Verification request created successfully")
             return jsonify({'success': True, 'message': 'Verification request submitted successfully'})
             
         except Exception as e:
-            print(f"❌ Error creating verification request: {e}")
+            print(f" Error creating verification request: {e}")
             # Ensure database connection is closed on error
             if conn:
                 try:
@@ -1613,7 +1717,7 @@ def verification_requests():
 def update_verification_request(request_id):
     try:
         data = request.get_json()
-        print(f"🔍 Received verification update data: {data}")
+        print(f" Received verification update data: {data}")
         
         if not data.get('status'):
             return jsonify({'success': False, 'message': 'Status is required'})
@@ -1660,7 +1764,7 @@ def update_verification_request(request_id):
             cursor.execute('''
                 UPDATE users 
                 SET verified = ?, discount_rate = ?, verification_type = ?, updated_at = ?
-                WHERE id = (SELECT user_id FROM verification_requests WHERE id = ?)
+                WHERE id = (SELECT user_id FROM verification_requests WHERE id = ?))
             ''', (is_verified, discount_rate, verification_type, datetime.now(), request_id))
             
             # Update user profile photo if approved and photo provided
@@ -1668,24 +1772,24 @@ def update_verification_request(request_id):
                 profile_photo = data.get('profilePhotoUrl') or user_photo_base64
                 cursor.execute('''
                     UPDATE users 
-                    SET profile_photo_url = ?
+                    SET profile_photo = ?
                     WHERE id = (SELECT user_id FROM verification_requests WHERE id = ?)
                 ''', (profile_photo, request_id))
-                print(f"✅ Updated profile photo for user with verification request ID: {request_id}")
+                print(f" Updated profile photo for user with verification request ID: {request_id}")
         
         conn.commit()
         conn.close()
         
-        print(f"✅ Verification request {request_id} updated successfully")
+        print(f" Verification request {request_id} updated successfully")
         return jsonify({'success': True, 'message': 'Verification request updated successfully'})
         
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})
 
 if __name__ == '__main__':
-    print("🚀 Starting Barangay Reserve Server...")
-    print(f"📱 Server will be available at: http://localhost:{Config.PORT}")
-    print("🌐 API endpoints:")
+    print("Starting Barangay Reserve Server...")
+    print(f"Server will be available at: http://localhost:{Config.PORT}")
+    print("API endpoints:")
     print("   GET    /api/facilities")
     print("   POST   /api/facilities")
     print("   PUT    /api/facilities/<id>")
@@ -1697,8 +1801,13 @@ if __name__ == '__main__':
     print("   PUT    /api/verification-requests/<id>")
     print("   POST   /api/login")
     print("   POST   /api/register")
-    print("   PUT    /api/users/profile")
+    print("   POST   /api/users/profile-photo")
     print("   GET    /api/users/profile/<email>")
     print("   POST   /api/setup-sample-data")
+    
+    # Serve static files for profile photos
+    @app.route('/uploads/profiles/<filename>')
+    def serve_profile_photo(filename):
+        return send_from_directory('uploads/profiles', filename)
     
     app.run(host=Config.HOST, port=Config.PORT, debug=Config.DEBUG)
