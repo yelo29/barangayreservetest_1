@@ -298,7 +298,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
       } else if (dateValue is int) {
         date = DateTime.fromMillisecondsSinceEpoch(dateValue);
       } else {
-        // handle Firestore Timestamp or other objects with toDate()
+        // handle timestamp objects with toDate() method
         try {
           date = (dateValue as dynamic).toDate();
         } catch (_) {

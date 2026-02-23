@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:io';
 
 class Booking {
@@ -50,12 +49,11 @@ class Booking {
     this.facilityDetails,
   });
 
-  // Factory constructor for creating Booking from Firestore document
-  factory Booking.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
+  // Factory constructor for creating Booking from map data
+  factory Booking.fromMap(Map<String, dynamic> data) {
     
     return Booking(
-      id: doc.id,
+      id: data['id'] ?? '',
       userId: data['userId'] ?? '',
       facilityId: data['facilityId'] ?? '',
       facilityName: data['facilityName'] ?? '',
@@ -80,7 +78,7 @@ class Booking {
     );
   }
 
-  // Convert Booking to Map for Firestore
+  // Convert Booking to Map for database
   Map<String, dynamic> toMap() {
     return {
       'userId': userId,
@@ -247,10 +245,10 @@ class BookingRequest {
     this.receiptImage,
   });
 
-  // Convert to Booking object (for Firestore)
+  // Convert to Booking object (for database)
   Booking toBooking(String userId, String receiptImageUrl) {
     return Booking(
-      id: '', // Will be set by Firestore
+      id: '', // Will be set by database
       userId: userId,
       facilityId: facilityId,
       facilityName: facilityName,
