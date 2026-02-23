@@ -222,12 +222,11 @@ class AuthenticationRequest {
     required this.email,
   });
 
-  // Factory constructor for creating AuthenticationRequest from Firestore document
-  factory AuthenticationRequest.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
+  // Factory constructor for creating AuthenticationRequest from map data
+  factory AuthenticationRequest.fromMap(Map<String, dynamic> data) {
     
     return AuthenticationRequest(
-      id: doc.id,
+      id: data['id'] ?? '',
       userId: data['userId'] ?? '',
       fullName: data['fullName'] ?? '',
       address: data['address'] ?? '',
@@ -243,7 +242,7 @@ class AuthenticationRequest {
     );
   }
 
-  // Convert AuthenticationRequest to Map for Firestore
+  // Convert AuthenticationRequest to Map for database
   Map<String, dynamic> toMap() {
     return {
       'userId': userId,

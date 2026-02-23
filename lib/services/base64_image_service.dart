@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 
 class Base64ImageService {
-  static const int maxImageSize = 800 * 1024; // 800KB limit for Firestore
+  static const int maxImageSize = 800 * 1024; // 800KB limit for database storage
 
   // Compress and convert image to base64
   static Future<String?> imageToBase64(File imageFile) async {
