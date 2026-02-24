@@ -1024,9 +1024,10 @@ def register():
         password_hash = hashlib.sha256(data['password'].encode()).hexdigest()
         
         cursor.execute('''
-            INSERT INTO users (email, password_hash, full_name, role)
-            VALUES (?, ?, ?, ?)
-        ''', (data['email'], password_hash, data['name'], data['role']))
+            INSERT INTO users (email, password_hash, full_name, role, contact_number, address)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (data['email'], password_hash, data['name'], data['role'], 
+              data.get('contact_number'), data.get('address')))
         
         # Get the newly created user
         cursor.execute('SELECT * FROM users WHERE email = ?', (data['email'],))
