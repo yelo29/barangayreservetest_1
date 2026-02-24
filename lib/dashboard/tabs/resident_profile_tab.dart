@@ -292,37 +292,18 @@ class _ResidentProfileTabState extends State<ResidentProfileTab> {
                             ? 'Verified as Non-Resident (5% discount) - Tap to upgrade'
                             : 'Get verified for discount benefits'),
                     onTap: () {
-                      // Check if user is already verified as BARANGAY RESIDENT only
-                      // Non-residents can still access verification to potentially upgrade to resident status
-                      if (_authApiService.isVerifiedResident()) {
-                        // Show "Already Verified" popup for barangay residents only
-                        showDialog(
-                          context: context,
-                          builder: (context) => AlertDialog(
-                            title: const Text('Already Verified'),
-                            content: const Text('Your account is already verified as a Barangay Resident. You enjoy 10% discount benefits on all facilities!'),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.of(context).pop(),
-                                child: const Text('OK'),
-                              ),
-                            ],
+                      // Allow ALL users to access verification screen
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ResidentVerificationScreen(
+                            userData: _currentUser,
                           ),
-                        );
-                      } else {
-                        // Allow unverified users and non-residents to access verification screen
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => ResidentVerificationScreen(
-                              userData: _currentUser,
-                            ),
-                          ),
-                        ).then((_) {
-                          // Refresh user data when returning from verification screen
-                          _loadUserData();
-                        });
-                      }
+                        ),
+                      ).then((_) {
+                        // Refresh user data when returning from verification screen
+                        _loadUserData();
+                      });
                     },
                   ),
 
