@@ -4,7 +4,6 @@ import 'dart:io';
 import '../services/auth_api_service.dart';
 import '../services/api_service.dart';
 import '../services/base64_image_service.dart';
-import '../models/facility_model.dart';
 
 class ResidentVerificationScreen extends StatefulWidget {
   final Map<String, dynamic>? userData;
@@ -31,11 +30,23 @@ class _ResidentVerificationScreenState extends State<ResidentVerificationScreen>
   File? _idImage;
   String? _profileImageUrl;
   String? _idImageUrl;
+  bool _isVerifiedResident = false;
+  bool _isVerifiedNonResident = false;
 
   @override
   void initState() {
     super.initState();
     _initializeForm();
+    _checkVerificationStatus();
+  }
+
+  void _checkVerificationStatus() {
+    // Get current user verification status
+    final authApiService = AuthApiService();
+    _isVerifiedResident = authApiService.isVerifiedResident();
+    _isVerifiedNonResident = authApiService.isVerifiedNonResident();
+    
+    print('🔍 Verification Status - Resident: $_isVerifiedResident, Non-Resident: $_isVerifiedNonResident');
   }
 
   void _initializeForm() {
@@ -279,6 +290,7 @@ class _ResidentVerificationScreenState extends State<ResidentVerificationScreen>
                     TextFormField(
                       controller: _nameController,
                       decoration: _buildInputDecoration('Full Name', Icons.person),
+                      enabled: !_isVerifiedResident, // Lock for verified residents
                       validator: (value) {
                         if (value == null || value.isEmpty) {
                           return 'Please enter your full name';
@@ -291,6 +303,7 @@ class _ResidentVerificationScreenState extends State<ResidentVerificationScreen>
                       controller: _contactController,
                       decoration: _buildInputDecoration('Contact Number', Icons.phone),
                       keyboardType: TextInputType.phone,
+                      enabled: !_isVerifiedResident, // Lock for verified residents
                       validator: (value) {
                         if (value == null || value.isEmpty) {
                           return 'Please enter your contact number';
@@ -303,6 +316,7 @@ class _ResidentVerificationScreenState extends State<ResidentVerificationScreen>
                       controller: _addressController,
                       decoration: _buildInputDecoration('Complete Address', Icons.location_on),
                       maxLines: 2,
+                      enabled: !_isVerifiedResident, // Lock for verified residents
                       validator: (value) {
                         if (value == null || value.isEmpty) {
                           return 'Please enter your address';
@@ -327,7 +341,7 @@ class _ResidentVerificationScreenState extends State<ResidentVerificationScreen>
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  onPressed: _isLoading ? null : _submitVerification,
+                  onPressed: _isVerifiedResident ? null : (_isLoading ? null : _submitVerification), // Lock for verified residents
                   icon: _isLoading 
                       ? const SizedBox(
                           width: 20,
@@ -340,7 +354,7 @@ class _ResidentVerificationScreenState extends State<ResidentVerificationScreen>
                       : const Icon(Icons.verified_user),
                   label: Text(_isLoading ? 'Submitting...' : 'Submit Verification'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
+                    backgroundColor: _isVerifiedResident ? Colors.grey : Colors.blue, // Grey for locked
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
@@ -357,6 +371,20 @@ class _ResidentVerificationScreenState extends State<ResidentVerificationScreen>
   }
 
   Widget _buildInfoCard() {
+    // Determine content based on verification status
+    String mainTitle, subtitle;
+    
+    if (_isVerifiedResident) {
+      mainTitle = "Congrats on being Verified Resident!";
+      subtitle = "Enjoy your 10% Discount on all Facility Bookings!";
+    } else if (_isVerifiedNonResident) {
+      mainTitle = "Upgrade Verified Status for Discounts";
+      subtitle = "Upgrade your Verified account to get a higher discounts on facility bookings";
+    } else {
+      mainTitle = "Get Verified for Discounts";
+      subtitle = "Verify your account to get exclusive discounts on facility bookings";
+    }
+    
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -383,8 +411,8 @@ class _ResidentVerificationScreenState extends State<ResidentVerificationScreen>
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
-                  Icons.verified_user,
-                  color: Colors.blue[600],
+                  _isVerifiedResident ? Icons.verified : Icons.verified_user,
+                  color: _isVerifiedResident ? Colors.green : Colors.blue[600],
                   size: 24,
                 ),
               ),
@@ -393,17 +421,17 @@ class _ResidentVerificationScreenState extends State<ResidentVerificationScreen>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Get Verified for Discounts',
+                    Text(
+                      mainTitle,
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
-                        color: Colors.black87,
+                        color: _isVerifiedResident ? Colors.green : Colors.black87,
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Verify your account to get exclusive discounts on facility bookings',
+                      subtitle,
                       style: TextStyle(
                         fontSize: 14,
                         color: Colors.grey[600],
@@ -513,7 +541,7 @@ class _ResidentVerificationScreenState extends State<ResidentVerificationScreen>
           children: [
             Expanded(
               child: GestureDetector(
-                onTap: () {
+                onTap: _isVerifiedResident ? null : () { // Lock for verified residents
                   setState(() {
                     _selectedVerificationType = 'resident';
                   });
@@ -541,7 +569,7 @@ class _ResidentVerificationScreenState extends State<ResidentVerificationScreen>
             const SizedBox(width: 12),
             Expanded(
               child: GestureDetector(
-                onTap: () {
+                onTap: (_isVerifiedResident || _isVerifiedNonResident) ? null : () { // Lock for verified residents and non-residents
                   setState(() {
                     _selectedVerificationType = 'non-resident';
                   });
@@ -559,7 +587,9 @@ class _ResidentVerificationScreenState extends State<ResidentVerificationScreen>
                     'Non-Resident',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: _selectedVerificationType == 'non-resident' ? Colors.white : Colors.black87,
+                      color: (_isVerifiedResident || _isVerifiedNonResident) 
+                          ? Colors.grey[400] // Disabled color
+                          : (_selectedVerificationType == 'non-resident' ? Colors.white : Colors.black87),
                       fontWeight: _selectedVerificationType == 'non-resident' ? FontWeight.bold : FontWeight.normal,
                     ),
                   ),
@@ -654,25 +684,26 @@ class _ResidentVerificationScreenState extends State<ResidentVerificationScreen>
                       height: double.infinity,
                     ),
                   ),
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: GestureDetector(
-                      onTap: onRemove,
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: Colors.red,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: const Icon(
-                          Icons.close,
-                          color: Colors.white,
-                          size: 16,
+                  if (!_isVerifiedResident) // Only show remove button for non-verified users
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: GestureDetector(
+                        onTap: onRemove,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: const Icon(
+                            Icons.close,
+                            color: Colors.white,
+                            size: 16,
+                          ),
                         ),
                       ),
                     ),
-                  ),
                 ],
               ),
             )
@@ -681,26 +712,29 @@ class _ResidentVerificationScreenState extends State<ResidentVerificationScreen>
               height: 120,
               width: double.infinity,
               decoration: BoxDecoration(
-                color: Colors.grey[100],
+                color: _isVerifiedResident ? Colors.grey[200] : Colors.grey[100], // Darker grey for locked
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.grey[300]!, style: BorderStyle.solid),
+                border: Border.all(
+                  color: Colors.grey[300]!, 
+                  style: BorderStyle.solid,
+                ),
               ),
               child: Material(
                 color: Colors.transparent,
                 child: InkWell(
                   borderRadius: BorderRadius.circular(8),
-                  onTap: onTap,
+                  onTap: _isVerifiedResident ? null : onTap, // Lock for verified residents
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(
-                        Icons.cloud_upload,
+                        _isVerifiedResident ? Icons.lock : Icons.cloud_upload,
                         size: 32,
-                        color: Colors.grey[400],
+                        color: _isVerifiedResident ? Colors.grey[400] : Colors.grey[400],
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Tap to upload',
+                        _isVerifiedResident ? 'Locked' : 'Tap to upload',
                         style: TextStyle(
                           color: Colors.grey[600],
                           fontSize: 14,
