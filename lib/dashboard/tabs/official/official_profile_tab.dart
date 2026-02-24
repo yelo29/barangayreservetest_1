@@ -17,7 +17,7 @@ class _OfficialProfileTabState extends State<OfficialProfileTab> {
   final _nameController = TextEditingController();
   final _contactController = TextEditingController();
   Map<String, dynamic>? _currentUser;
-  final _authApiService = AuthApiService();
+  final _authApiService = AuthApiService.instance;
 
   @override
   void initState() {

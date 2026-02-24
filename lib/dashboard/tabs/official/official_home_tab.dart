@@ -26,7 +26,7 @@ class _OfficialHomeTabState extends State<OfficialHomeTab> {
   Map<String, List<Map<String, dynamic>>> _officialBookings = {};
   bool _isLoading = true;
   Map<String, dynamic>? _currentUser;
-  final AuthApiService _authApiService = AuthApiService();
+  final AuthApiService _authApiService = AuthApiService.instance;
 
   @override
   void initState() {

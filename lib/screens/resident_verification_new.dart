@@ -42,19 +42,55 @@ class _ResidentVerificationScreenState extends State<ResidentVerificationScreen>
 
   void _checkVerificationStatus() {
     // Get current user verification status
-    final authApiService = AuthApiService();
+    final authApiService = AuthApiService.instance;
     _isVerifiedResident = authApiService.isVerifiedResident();
     _isVerifiedNonResident = authApiService.isVerifiedNonResident();
     
     print('🔍 Verification Status - Resident: $_isVerifiedResident, Non-Resident: $_isVerifiedNonResident');
   }
 
-  void _initializeForm() {
-    // Auto-fill user data
-    if (widget.userData != null) {
-      _nameController.text = widget.userData!['fullName'] ?? '';
-      _contactController.text = widget.userData!['contactNumber'] ?? '';
-      _addressController.text = widget.userData!['address'] ?? '';
+  void _initializeForm() async {
+    // Auto-fill user data from latest profile
+    try {
+      final authApiService = AuthApiService.instance;
+      final currentUser = await authApiService.ensureUserLoaded();
+      
+      if (currentUser != null) {
+        setState(() {
+          _nameController.text = currentUser['full_name'] ?? '';
+          _contactController.text = currentUser['contact_number'] ?? '';
+          _addressController.text = currentUser['address'] ?? '';
+        });
+        print('🔍 Verification Form - Auto-filled with latest profile data:');
+        print('  - Full Name: "${_nameController.text}"');
+        print('  - Contact: "${_contactController.text}"');
+        print('  - Address: "${_addressController.text}"');
+      } else if (widget.userData != null) {
+        // Fallback to widget data if current user not available
+        setState(() {
+          _nameController.text = widget.userData!['fullName'] ?? '';
+          _contactController.text = widget.userData!['contactNumber'] ?? '';
+          _addressController.text = widget.userData!['address'] ?? '';
+        });
+        print('🔍 Verification Form - Auto-filled with widget data (fallback):');
+        print('  - Full Name: "${_nameController.text}"');
+        print('  - Contact: "${_contactController.text}"');
+        print('  - Address: "${_addressController.text}"');
+      }
+    } catch (e) {
+      print('❌ Error auto-filling verification form: $e');
+      // Fallback to widget data
+      if (widget.userData != null) {
+        setState(() {
+          _nameController.text = widget.userData!['fullName'] ?? '';
+          _contactController.text = widget.userData!['contactNumber'] ?? '';
+          _addressController.text = widget.userData!['address'] ?? '';
+        });
+        print('🔍 Verification Form - Fallback to widget data:');
+        print('  - Full Name: "${_nameController.text}"');
+        print('  - Contact: "${_contactController.text}"');
+        print('  - Address: "${_addressController.text}"');
+      }
     }
   }
 
@@ -135,7 +171,7 @@ class _ResidentVerificationScreenState extends State<ResidentVerificationScreen>
 
     try {
       // Get user ID from server user data
-      final authApiService = AuthApiService();
+      final authApiService = AuthApiService.instance;
       final userData = await authApiService.ensureUserLoaded();
       final userId = userData?['id']?.toString() ?? 'unknown';
       
@@ -211,7 +247,7 @@ class _ResidentVerificationScreenState extends State<ResidentVerificationScreen>
       }
 
       // Create verification request
-      final authApiService = AuthApiService();
+      final authApiService = AuthApiService.instance;
       final currentUser = await authApiService.ensureUserLoaded();
       
       if (currentUser == null) {

@@ -88,7 +88,7 @@ class _FormScreenState extends State<FormScreen> {
 
   Future<void> _initializeForm() async {
     try {
-      final authApiService = AuthApiService();
+      final authApiService = AuthApiService.instance;
       final currentUser = authApiService.currentUser;
       print('🔍 Current user from server: $currentUser');
       
@@ -146,7 +146,7 @@ class _FormScreenState extends State<FormScreen> {
 
   Future<String?> _uploadReceipt(File imageFile) async {
     try {
-      final authApiService = AuthApiService();
+      final authApiService = AuthApiService.instance;
       final currentUser = authApiService.currentUser;
       if (currentUser == null) {
         print('❌ No user logged in - cannot upload receipt');

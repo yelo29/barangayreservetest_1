@@ -22,7 +22,7 @@ class ResidentProfileTab extends StatefulWidget {
 
 class _ResidentProfileTabState extends State<ResidentProfileTab> {
   Map<String, dynamic>? _currentUser;
-  AuthApiService _authApiService = AuthApiService();
+  AuthApiService _authApiService = AuthApiService.instance;
   bool _isLoading = true;
   String? _profilePhotoUrl;
 
