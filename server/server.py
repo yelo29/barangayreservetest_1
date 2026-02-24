@@ -1379,6 +1379,15 @@ def update_user_profile():
             data['email']
         ))
         
+        # Update profile photo if provided
+        if 'profile_photo_url' in data and data['profile_photo_url']:
+            cursor.execute('''
+                UPDATE users 
+                SET profile_photo_url = ?
+                WHERE email = ?
+            ''', (data['profile_photo_url'], data['email']))
+            print(f"✅ Updated profile photo for user: {data['email']}")
+        
         conn.commit()
         conn.close()
         
@@ -1393,7 +1402,7 @@ def get_user_profile(email):
         cursor = conn.cursor()
         
         cursor.execute('''
-            SELECT id, email, full_name, contact_number, address, role, verified, discount_rate, created_at, fake_booking_violations, is_banned, banned_at, ban_reason
+            SELECT id, email, full_name, contact_number, address, role, verified, discount_rate, created_at, fake_booking_violations, is_banned, banned_at, ban_reason, profile_photo_url
             FROM users 
             WHERE email = ?
         ''', (email,))
@@ -1417,7 +1426,8 @@ def get_user_profile(email):
                     'fake_booking_violations': user[9] if len(user) > 9 else 0,
                     'is_banned': user[10] if len(user) > 10 else False,
                     'banned_at': user[11] if len(user) > 11 else None,
-                    'ban_reason': user[12] if len(user) > 12 else None
+                    'ban_reason': user[12] if len(user) > 12 else None,
+                    'profile_photo_url': user[13] if len(user) > 13 else None
                 }
             })
         else:

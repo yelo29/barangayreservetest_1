@@ -183,6 +183,11 @@ class AuthApiService {
           await prefs.setString('user_role', user['role']?.toString() ?? '');
           await prefs.setBool('user_verified', user['verified'] ?? false);
           await prefs.setDouble('user_discount_rate', (user['discount_rate'] ?? 0.0).toDouble());
+          // Save profile photo to SharedPreferences
+          if (user['profile_photo_url'] != null && user['profile_photo_url'].toString().isNotEmpty) {
+            await prefs.setString('user_profile_photo_url', user['profile_photo_url'].toString());
+            print('🔍 Saved profile photo to SharedPreferences during login: ${user['profile_photo_url']}');
+          }
         } catch (e) {
           print('❌ AuthApiService SharedPreferences error: $e');
           print('❌ User data: $user');
@@ -267,6 +272,13 @@ class AuthApiService {
         
         _currentUser = user;
         print('✅ User restored successfully');
+        
+        // Load profile photo from SharedPreferences as fallback
+        final profilePhotoUrl = prefs.getString('user_profile_photo_url');
+        if (profilePhotoUrl != null && profilePhotoUrl.isNotEmpty) {
+          _currentUser!['profile_photo_url'] = profilePhotoUrl;
+          print('🔍 Loaded profile photo from SharedPreferences during restore: $profilePhotoUrl');
+        }
         
         // Note: Ban checking removed - user will implement new approach
         
@@ -536,6 +548,22 @@ class AuthApiService {
           await prefs.setDouble('user_discount_rate', (processedUser['discount_rate'] ?? 0.0).toDouble());
           await prefs.setBool('user_verified', processedUser['verified'] ?? false);
           
+          // Preserve existing profile photo if server has empty one
+          final existingProfilePhoto = prefs.getString('user_profile_photo_url');
+          final serverProfilePhoto = processedUser['profile_photo_url']?.toString() ?? '';
+          
+          if (serverProfilePhoto.isNotEmpty) {
+            // Server has profile photo, use it
+            await prefs.setString('user_profile_photo_url', serverProfilePhoto);
+            print('🔍 Updated profile photo from server: $serverProfilePhoto');
+          } else if (existingProfilePhoto != null && existingProfilePhoto.isNotEmpty) {
+            // Server has empty profile photo, preserve existing one
+            await prefs.setString('user_profile_photo_url', existingProfilePhoto);
+            print('🔍 Preserved existing profile photo: $existingProfilePhoto');
+            // Update current user with preserved photo
+            _currentUser!['profile_photo_url'] = existingProfilePhoto;
+          }
+          
           print('🔍 User data refreshed from server');
           return processedUser;
         }
@@ -612,6 +640,10 @@ class AuthApiService {
       if (userData['discount_rate'] != null) {
         await prefs.setDouble('user_discount_rate', userData['discount_rate'].toDouble());
       }
+      if (userData['profile_photo_url'] != null) {
+        await prefs.setString('user_profile_photo_url', userData['profile_photo_url']);
+        print('🔍 Saved profile photo to SharedPreferences: ${userData['profile_photo_url']}');
+      }
       
       // Update current user object
       if (_currentUser != null) {
@@ -638,7 +670,12 @@ class AuthApiService {
 
   String getUserProfilePhoto() {
     if (_currentUser != null) {
-      return _currentUser!['profile_photo_url'] ?? '';
+      // Prioritize SharedPreferences (most recent manual update)
+      final profilePhotoUrl = _currentUser!['profile_photo_url']?.toString() ?? '';
+      if (profilePhotoUrl.isNotEmpty) {
+        print('🔍 getUserProfilePhoto: Using current user photo: $profilePhotoUrl');
+        return profilePhotoUrl;
+      }
     }
     return '';
   }

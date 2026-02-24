@@ -618,6 +618,82 @@ class _ResidentAccountSettingsScreenState extends State<ResidentAccountSettingsS
     );
   }
 
+  void _showCustomerService() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Customer Service'),
+        content: const SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Contact Information',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              SizedBox(height: 12),
+              Text('📞 Hotline: 0967-669-6767'),
+              Text('📧 Email: support@barangay.gov'),
+              Text('🕐 Hours: Monday - Friday, 8:00 AM - 5:00 PM'),
+              Text('📍 Office: Barangay Hall, 2nd Floor, Main Street'),
+              SizedBox(height: 20),
+              Text(
+                'Available Services',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              SizedBox(height: 8),
+              Text('• Account assistance and verification'),
+              Text('• Booking support and modifications'),
+              Text('• Payment processing and receipt upload'),
+              Text('• Technical issues and troubleshooting'),
+              Text('• Facility inquiries and availability'),
+              Text('• Emergency booking assistance'),
+              SizedBox(height: 20),
+              Text(
+                'Response Times',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              SizedBox(height: 8),
+              Text('• Phone calls: Immediate during business hours'),
+              Text('• Email responses: Within 24 hours'),
+              Text('• Urgent issues: Prioritized handling'),
+              Text('• Weekend emergencies: On-call staff available'),
+              SizedBox(height: 20),
+              Text(
+                'Additional Support Channels',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              SizedBox(height: 8),
+              Text('• In-person assistance at barangay hall'),
+              Text('• Community leader mediation'),
+              Text('• Online chat support (coming soon)'),
+              Text('• Mobile app notifications for updates'),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showPrivacyPolicy() {
     showDialog(
       context: context,
