@@ -227,7 +227,11 @@ def get_bookings():
     print("🔍 BOOKINGS ENDPOINT CALLED!")  # Simple debug test
     user_email = request.args.get('user_email')
     user_role = request.args.get('user_role', 'resident')  # Default to resident for privacy
+    facility_id = request.args.get('facility_id')  # NEW: Facility filtering
+    date = request.args.get('date')  # NEW: Date filtering
     exclude_user_role = request.args.get('excludeUserRole', '').lower() == 'true'  # New parameter to exclude user role filtering
+    
+    print(f"🔍 DEBUG: Parameters - facility_id={facility_id}, date={date}, user_role={user_role}, user_email={user_email}")
     
     conn = get_db()
     cursor = conn.cursor()
@@ -236,7 +240,9 @@ def get_bookings():
         if exclude_user_role:
             # Return ALL bookings without any user role filtering (for official use)
             print("🔍 Returning ALL bookings (excludeUserRole=true)")
-            bookings = cursor.execute('''
+            
+            # Build query with optional facility and date filtering
+            query = '''
                 SELECT b.id, b.booking_reference, b.user_id, b.facility_id, b.time_slot_id, 
                        b.booking_date, b.start_time, b.end_time, b.duration_hours,
                        b.purpose, b.expected_attendees, b.special_requirements,
@@ -250,8 +256,28 @@ def get_bookings():
                 FROM bookings b
                 LEFT JOIN facilities f ON b.facility_id = f.id
                 LEFT JOIN users u ON b.user_id = u.id
-                ORDER BY b.booking_date DESC, b.start_time ASC
-            ''').fetchall()
+            '''
+            
+            params = []
+            conditions = []
+            
+            if facility_id:
+                conditions.append('b.facility_id = ?')
+                params.append(facility_id)
+            
+            if date:
+                conditions.append('b.booking_date = ?')
+                params.append(date)
+            
+            if conditions:
+                query += ' WHERE ' + ' AND '.join(conditions)
+            
+            query += ' ORDER BY b.booking_date DESC, b.start_time ASC'
+            
+            print(f"🔍 DEBUG: Query: {query}")
+            print(f"🔍 DEBUG: Params: {params}")
+            
+            bookings = cursor.execute(query, params).fetchall()
             
             # Create dictionary manually with proper column names
             result = []
@@ -275,14 +301,37 @@ def get_bookings():
                         booking_dict[col_name] = booking[i]
                 result.append(booking_dict)
         elif user_role == 'resident' and user_email:
-            # Residents can see all bookings for calendar (but without sensitive details)
-            bookings = cursor.execute('''
+            # Residents can see filtered bookings for calendar (but without sensitive details)
+            print("🔍 Returning filtered bookings for resident")
+            
+            # Build query with optional facility and date filtering
+            query = '''
                 SELECT b.*, f.name as facility_name, u.full_name, u.email as user_email, u.verified, u.discount_rate, u.role as user_role
                 FROM bookings b
                 LEFT JOIN facilities f ON b.facility_id = f.id
                 LEFT JOIN users u ON b.user_id = u.id
-                ORDER BY b.booking_date DESC, b.start_time ASC
-            ''').fetchall()
+            '''
+            
+            params = []
+            conditions = []
+            
+            if facility_id:
+                conditions.append('b.facility_id = ?')
+                params.append(facility_id)
+            
+            if date:
+                conditions.append('b.booking_date = ?')
+                params.append(date)
+            
+            if conditions:
+                query += ' WHERE ' + ' AND '.join(conditions)
+            
+            query += ' ORDER BY b.booking_date DESC, b.start_time ASC'
+            
+            print(f"🔍 DEBUG: Resident Query: {query}")
+            print(f"🔍 DEBUG: Resident Params: {params}")
+            
+            bookings = cursor.execute(query, params).fetchall()
             
             # For residents, return only essential booking info (privacy protection)
             result = []
@@ -321,14 +370,37 @@ def get_bookings():
                 result.append(booking_dict)
                 
         elif user_role == 'official':
-            # Officials can see all bookings
-            bookings = cursor.execute('''
+            # Officials can see filtered bookings
+            print("🔍 Returning filtered bookings for official")
+            
+            # Build query with optional facility and date filtering
+            query = '''
                 SELECT b.*, f.name as facility_name, u.full_name, u.email as user_email, u.verified, u.discount_rate, u.role as user_role
                 FROM bookings b
                 LEFT JOIN facilities f ON b.facility_id = f.id
                 LEFT JOIN users u ON b.user_id = u.id
-                ORDER BY b.booking_date DESC, b.start_time ASC
-            ''').fetchall()
+            '''
+            
+            params = []
+            conditions = []
+            
+            if facility_id:
+                conditions.append('b.facility_id = ?')
+                params.append(facility_id)
+            
+            if date:
+                conditions.append('b.booking_date = ?')
+                params.append(date)
+            
+            if conditions:
+                query += ' WHERE ' + ' AND '.join(conditions)
+            
+            query += ' ORDER BY b.booking_date DESC, b.start_time ASC'
+            
+            print(f"🔍 DEBUG: Official Query: {query}")
+            print(f"🔍 DEBUG: Official Params: {params}")
+            
+            bookings = cursor.execute(query, params).fetchall()
             result = [dict(booking) for booking in bookings]
         else:
             result = []
