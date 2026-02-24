@@ -511,7 +511,12 @@ class ApiService {
   }
 
   // Additional methods for compatibility
-  static Future<Map<String, dynamic>> register(String name, String email, String password, {String role = 'resident'}) async {
+  static Future<Map<String, dynamic>> register(
+    String name, 
+    String email, 
+    String password, 
+    {String role = 'resident'}
+  ) async {
     try {
       print('🔍 ApiService.register called');
       print('🔍 Using baseUrl: $baseUrl');

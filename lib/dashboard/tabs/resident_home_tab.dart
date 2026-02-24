@@ -23,7 +23,7 @@ class _ResidentHomeTabState extends State<ResidentHomeTab> {
   Map<String, dynamic>? _currentUser;
   bool _isLoading = false;
   bool _isLoadingFacilities = false;
-  AuthApiService _authApiService = AuthApiService();
+  AuthApiService _authApiService = AuthApiService.instance;
   
   // Helper function to get facility rate with fallback
   String _getFacilityRate(Map<String, dynamic> facility) {

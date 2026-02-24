@@ -1,18 +1,22 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'api_service_updated.dart';
-import 'api_service.dart' as api;
-import '../config/app_config.dart';
-import 'dart:async';
+import 'api_service.dart';
 
 class AuthApiService {
-  static final AuthApiService _instance = AuthApiService._internal();
-  factory AuthApiService() => _instance;
-  AuthApiService._internal();
+  static AuthApiService? _instance;
+  static AuthApiService get instance => _instance ??= AuthApiService._();
+  
+  AuthApiService._();
 
   Map<String, dynamic>? _currentUser;
   bool _isInitialized = false;
+
+  // Get auth token from SharedPreferences
+  static Future<String?> _getToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('auth_token');
+  }
 
   // Initialize user session
   Future<void> initializeUser() async {
@@ -439,7 +443,107 @@ class AuthApiService {
       // Still clear local data even if network fails
       _currentUser = null;
       _isInitialized = false;
-      return {'success': true, 'message': 'Signed out successfully'};
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
+  // Refresh current user data from server
+  Future<Map<String, dynamic>?> refreshCurrentUser() async {
+    try {
+      final token = await _getToken();
+      if (token == null) return null;
+      
+      final userEmail = getUserEmail();
+      if (userEmail == null) return null;
+      
+      final response = await http.get(
+        Uri.parse('${ApiService.baseUrl}/api/users/profile/$userEmail'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true) {
+          final user = data['user'];
+          
+          // Convert integer booleans to actual booleans and handle verification types
+          Map<String, dynamic> processedUser = Map<String, dynamic>.from(user);
+          
+          // Handle verification status properly - support both int and bool types
+          dynamic verifiedStatus = processedUser['verified'];
+          if (verifiedStatus is bool) {
+            // Server returned boolean (true/false)
+            if (verifiedStatus == true) {
+              // Check verification_type to determine resident vs non-resident
+              String? verificationType = processedUser['verification_type'];
+              if (verificationType == 'resident') {
+                processedUser['verified'] = true;
+                processedUser['verification_type'] = 'resident';
+              } else if (verificationType == 'non-resident') {
+                processedUser['verified'] = true;
+                processedUser['verification_type'] = 'non-resident';
+              } else {
+                // Default to resident if type is missing
+                processedUser['verified'] = true;
+                processedUser['verification_type'] = 'resident';
+              }
+            } else {
+              processedUser['verified'] = false;
+              processedUser['verification_type'] = null;
+            }
+          } else if (verifiedStatus is int) {
+            // Server returned integer (0, 1, 2)
+            int status = verifiedStatus;
+            if (status == 1) {
+              processedUser['verified'] = true;
+              processedUser['verification_type'] = 'resident';
+            } else if (status == 2) {
+              processedUser['verified'] = true;
+              processedUser['verification_type'] = 'non-resident';
+            } else {
+              processedUser['verified'] = false;
+              processedUser['verification_type'] = null;
+            }
+          } else {
+            // Fallback
+            processedUser['verified'] = false;
+            processedUser['verification_type'] = null;
+          }
+          
+          processedUser['email_verified'] = processedUser['email_verified'] == 1 || processedUser['email_verified'] == true;
+          processedUser['is_active'] = processedUser['is_active'] == 1 || processedUser['is_active'] == true;
+          
+          // Merge with existing user data to preserve fields like profile_photo_url
+          if (_currentUser != null) {
+            _currentUser = {..._currentUser!, ...processedUser};
+          } else {
+            _currentUser = processedUser;
+          }
+          
+          print('🔍 Verification status after merge:');
+          print('  - verified: ${_currentUser!['verified']} (${_currentUser!['verified'].runtimeType})');
+          print('  - verification_type: ${_currentUser!['verification_type']}');
+          print('  - isVerifiedResident(): ${isVerifiedResident()}');
+          print('  - isVerifiedNonResident(): ${isVerifiedNonResident()}');
+          print('  - isUserVerified(): ${isUserVerified()}');
+          
+          // Update SharedPreferences with fresh data
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('user_name', processedUser['full_name']?.toString() ?? '');
+          await prefs.setDouble('user_discount_rate', (processedUser['discount_rate'] ?? 0.0).toDouble());
+          await prefs.setBool('user_verified', processedUser['verified'] ?? false);
+          
+          print('🔍 User data refreshed from server');
+          return processedUser;
+        }
+      }
+      return null;
+    } catch (e) {
+      print('❌ Error refreshing user data: $e');
+      return null;
     }
   }
 
@@ -541,18 +645,36 @@ class AuthApiService {
 
   bool isVerifiedResident() {
     if (_currentUser != null) {
-      return _currentUser!['verified'] == true && 
-             (_currentUser!['verification_type'] == 'resident' || 
-              _currentUser!['discount_rate'] == 0.1);
+      final verified = _currentUser!['verified'] == true;
+      final verificationType = _currentUser!['verification_type'] == 'resident';
+      final discountRate = _currentUser!['discount_rate'] == 0.1;
+      final result = verified && (verificationType || discountRate);
+      
+      print('🔍 isVerifiedResident() debug:');
+      print('  - verified: $verified');
+      print('  - verification_type: ${_currentUser!['verification_type']} (resident: $verificationType)');
+      print('  - discount_rate: ${_currentUser!['discount_rate']} (0.1: $discountRate)');
+      print('  - final result: $result');
+      
+      return result;
     }
     return false;
   }
 
   bool isVerifiedNonResident() {
     if (_currentUser != null) {
-      return _currentUser!['verified'] == true && 
-             (_currentUser!['verification_type'] == 'non-resident' || 
-              _currentUser!['discount_rate'] == 0.05);
+      final verified = _currentUser!['verified'] == true;
+      final verificationType = _currentUser!['verification_type'] == 'non-resident';
+      final discountRate = _currentUser!['discount_rate'] == 0.05;
+      final result = verified && (verificationType || discountRate);
+      
+      print('🔍 isVerifiedNonResident() debug:');
+      print('  - verified: $verified');
+      print('  - verification_type: ${_currentUser!['verification_type']} (non-resident: $verificationType)');
+      print('  - discount_rate: ${_currentUser!['discount_rate']} (0.05: $discountRate)');
+      print('  - final result: $result');
+      
+      return result;
     }
     return false;
   }

@@ -441,6 +441,38 @@ class DataService {
     }
   }
   
+  // Update user profile
+  static Future<Map<String, dynamic>> updateUserProfile(Map<String, dynamic> profileData) async {
+    try {
+      final userData = await getCurrentUserData();
+      if (userData == null) {
+        return {'success': false, 'error': 'User not logged in'};
+      }
+
+      // Add email to profile data for server identification
+      profileData['email'] = userData['email'];
+
+      final response = await http.put(
+        Uri.parse('${AppConfig.baseUrl}/api/users/profile'),
+        headers: await getHeaders(),
+        body: json.encode(profileData),
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return {
+          'success': true,
+          'message': data['message'] ?? 'Profile updated successfully',
+          'data': data,
+        };
+      } else {
+        return {'success': false, 'error': 'HTTP ${response.statusCode}'};
+      }
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+  
   // Fetch officials list
   static Future<Map<String, dynamic>> fetchOfficials() async {
     try {

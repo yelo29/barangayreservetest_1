@@ -44,7 +44,7 @@ class _OfficialLoginScreenState extends State<OfficialLoginScreen> {
       print('🔥 Starting server official sign in process...');
       print('Email: ${_emailController.text.trim()}');
       
-      final result = await AuthApiService().signInWithEmailAndPassword(
+      final result = await AuthApiService.instance.signInWithEmailAndPassword(
         _emailController.text.trim(),
         _passwordController.text.trim(),
       );
@@ -65,7 +65,7 @@ class _OfficialLoginScreenState extends State<OfficialLoginScreen> {
                 print('🔥 Official logout - clearing authentication data');
                 
                 // Clear authentication data
-                await AuthApiService().signOut();
+                await AuthApiService.instance.signOut();
                 await ApiService.clearUserData();
                 
                 // Navigate back to selection screen

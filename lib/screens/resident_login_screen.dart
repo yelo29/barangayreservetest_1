@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/api_service.dart';
 import '../services/auth_api_service.dart';
+import '../services/data_service.dart';
 import '../dashboard/resident_dashboard.dart';
 import '../screens/selection_screen.dart';
 
@@ -68,6 +69,8 @@ class _ResidentLoginScreenState extends State<ResidentLoginScreen> {
       print('🔥 Starting server sign up process...');
       print('Email: ${_emailController.text.trim()}');
       print('Name: ${_nameController.text.trim()}');
+      print('Contact: ${_contactController.text.trim()}');
+      print('Address: ${_addressController.text.trim()}');
       
       final result = await ApiService.register(
         _nameController.text.trim(),
@@ -76,12 +79,31 @@ class _ResidentLoginScreenState extends State<ResidentLoginScreen> {
         role: 'resident',
       );
       
+      // Update profile with contact and address after successful registration
+      if (result['success']) {
+        try {
+          final authApiService = AuthApiService.instance;
+          await authApiService.signInWithEmailAndPassword(
+            _emailController.text.trim(),
+            _passwordController.text.trim(),
+          );
+          
+          // Update profile with additional info
+          await DataService.updateUserProfile({
+            'contact_number': _contactController.text.trim(),
+            'address': _addressController.text.trim(),
+          });
+        } catch (e) {
+          print('❌ Error updating profile after registration: $e');
+        }
+      }
+      
       if (result['success']) {
         print('✅ Server Registration successful!');
         
         // AUTO-LOGIN AFTER REGISTRATION
         print('🔥 Auto-logging in after registration...');
-        final loginResult = await AuthApiService().signInWithEmailAndPassword(
+        final loginResult = await AuthApiService.instance.signInWithEmailAndPassword(
           _emailController.text.trim(),
           _passwordController.text.trim(),
         );
@@ -94,7 +116,7 @@ class _ResidentLoginScreenState extends State<ResidentLoginScreen> {
               print('🔥 Resident logout - clearing authentication data');
               
               // Clear authentication data
-              await AuthApiService().signOut();
+              await AuthApiService.instance.signOut();
               await ApiService.clearUserData();
               
               // Navigate back to selection screen
@@ -158,7 +180,7 @@ class _ResidentLoginScreenState extends State<ResidentLoginScreen> {
       print('🔥 Starting server sign in process...');
       print('Email: ${_emailController.text.trim()}');
       
-      final result = await AuthApiService().signInWithEmailAndPassword(
+      final result = await AuthApiService.instance.signInWithEmailAndPassword(
         _emailController.text.trim(),
         _passwordController.text.trim(),
       );
@@ -181,7 +203,7 @@ class _ResidentLoginScreenState extends State<ResidentLoginScreen> {
                 print('🔥 Resident logout - clearing authentication data');
                 
                 // Clear authentication data
-                await AuthApiService().signOut();
+                await AuthApiService.instance.signOut();
                 await ApiService.clearUserData();
                 
                 // Navigate back to selection screen

@@ -40,7 +40,7 @@ class _ResidentBookingsTabState extends State<ResidentBookingsTab> {
     }
 
     try {
-      final currentUser = await AuthApiService().getCurrentUser();
+      final currentUser = await AuthApiService.instance.getCurrentUser();
       if (currentUser == null || currentUser.isEmpty) {
         if (mounted) {
           setState(() {

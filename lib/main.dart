@@ -17,7 +17,7 @@ void main() async {
     DebugLogger.ui('Computer IP server ready for barangay operations');
     
     // Initialize user session
-    await AuthApiService().initializeUser();
+    await AuthApiService.instance.initializeUser();
     DebugLogger.ui('User session initialized');
   } catch (e) {
     DebugLogger.error('Initialization error: $e');

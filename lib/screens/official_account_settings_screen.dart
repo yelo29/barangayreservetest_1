@@ -29,7 +29,7 @@ class _OfficialAccountSettingsScreenState extends State<OfficialAccountSettingsS
 
     try {
       // Use AuthApiService for current user data (already logged in)
-      final userData = await AuthApiService().getCurrentUser();
+      final userData = await AuthApiService.instance.getCurrentUser();
       if (userData != null) {
         _currentUserEmail = userData['email'];
         
@@ -77,7 +77,7 @@ class _OfficialAccountSettingsScreenState extends State<OfficialAccountSettingsS
       
       if (result['success'] == true) {
         // Update local AuthApiService data after successful server update
-        final authApiService = AuthApiService();
+        final authApiService = AuthApiService.instance;
         await authApiService.updateCurrentUser({
           'full_name': _nameController.text.trim(),
           'contact_number': _contactController.text.trim(),

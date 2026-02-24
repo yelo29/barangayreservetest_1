@@ -26,7 +26,7 @@ class FacilityCalendarScreen extends StatefulWidget {
 class _FacilityCalendarScreenState extends State<FacilityCalendarScreen> {
   bool _isLoading = true;
   Map<String, dynamic>? _currentUser;
-  AuthApiService _authApiService = AuthApiService();
+  final AuthApiService _authApiService = AuthApiService.instance;
   
   // Booking data
   List<Map<String, dynamic>> _allBookings = [];

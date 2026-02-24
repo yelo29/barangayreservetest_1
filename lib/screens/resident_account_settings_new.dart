@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../services/auth_api_service.dart';
 import '../../../services/data_service.dart';
-import '../../../services/api_service_updated.dart' as api_service;
 import '../../../utils/debug_logger.dart';
 
 class ResidentAccountSettingsScreen extends StatefulWidget {
@@ -16,6 +15,8 @@ class ResidentAccountSettingsScreen extends StatefulWidget {
 class _ResidentAccountSettingsScreenState extends State<ResidentAccountSettingsScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
+  final _contactController = TextEditingController();
+  final _addressController = TextEditingController();
   bool _isLoading = false;
   bool _isLoadingContact = false;
   List<Map<String, dynamic>> _officials = [];
@@ -27,9 +28,53 @@ class _ResidentAccountSettingsScreenState extends State<ResidentAccountSettingsS
     _loadOfficialContact();
   }
 
-  void _loadUserData() {
-    if (widget.userData != null) {
-      _nameController.text = widget.userData!['full_name'] ?? '';
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Refresh data when screen becomes visible again
+    if (mounted) {
+      _loadUserData();
+    }
+  }
+
+  void _loadUserData() async {
+    try {
+      // Always fetch fresh data from server
+      final authApiService = AuthApiService.instance;
+      final currentUser = await authApiService.refreshCurrentUser();
+      
+      if (currentUser != null) {
+        setState(() {
+          _nameController.text = currentUser['full_name'] ?? '';
+          _contactController.text = currentUser['contact_number'] ?? '';
+          _addressController.text = currentUser['address'] ?? '';
+        });
+        print('🔍 Account Settings - Loaded fresh data from server:');
+        print('  - Full Name: "${_nameController.text}"');
+        print('  - Contact: "${_contactController.text}"');
+        print('  - Address: "${_addressController.text}"');
+      } else if (widget.userData != null) {
+        // Fallback to widget data
+        setState(() {
+          _nameController.text = widget.userData!['full_name'] ?? '';
+          _contactController.text = widget.userData!['contact_number'] ?? '';
+          _addressController.text = widget.userData!['address'] ?? '';
+        });
+        print('🔍 Account Settings - Loaded fallback data:');
+        print('  - Full Name: "${_nameController.text}"');
+        print('  - Contact: "${_contactController.text}"');
+        print('  - Address: "${_addressController.text}"');
+      }
+    } catch (e) {
+      print('❌ Error loading user data: $e');
+      // Fallback to widget data
+      if (widget.userData != null) {
+        setState(() {
+          _nameController.text = widget.userData!['full_name'] ?? '';
+          _contactController.text = widget.userData!['contact_number'] ?? '';
+          _addressController.text = widget.userData!['address'] ?? '';
+        });
+      }
     }
   }
 
@@ -75,7 +120,7 @@ class _ResidentAccountSettingsScreenState extends State<ResidentAccountSettingsS
     }
   }
 
-  Future<void> _updateName() async {
+  Future<void> _updatePersonalInfo() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() {
@@ -84,7 +129,7 @@ class _ResidentAccountSettingsScreenState extends State<ResidentAccountSettingsS
 
     try {
       // Get current user data
-      final authApiService = AuthApiService();
+      final authApiService = AuthApiService.instance;
       final currentUser = await authApiService.ensureUserLoaded();
       
       if (currentUser == null) {
@@ -92,20 +137,27 @@ class _ResidentAccountSettingsScreenState extends State<ResidentAccountSettingsS
       }
 
       // Update profile using server API
-      // TODO: Implement proper profile update in DataService
-      // For now, just update local data
-      final result = {'success': true};
+      final result = await DataService.updateUserProfile({
+        'full_name': _nameController.text.trim(),
+        'contact_number': _contactController.text.trim(),
+        'address': _addressController.text.trim(),
+      });
 
       if (result['success'] == true) {
         // Update local user data
         authApiService.updateCurrentUser({
           ...currentUser,
           'full_name': _nameController.text.trim(),
+          'contact_number': _contactController.text.trim(),
+          'address': _addressController.text.trim(),
         });
+
+        // Refresh user data from server to get latest info
+        await authApiService.refreshCurrentUser();
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Profile updated successfully!'),
+            content: Text('Personal information updated successfully!'),
             backgroundColor: Colors.green,
           ),
         );
@@ -223,7 +275,7 @@ class _ResidentAccountSettingsScreenState extends State<ResidentAccountSettingsS
 
             const SizedBox(height: 24),
 
-            // Update Name Section
+            // Personal Information Section
             Container(
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -245,7 +297,7 @@ class _ResidentAccountSettingsScreenState extends State<ResidentAccountSettingsS
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Update Name',
+                        'Personal Information',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
@@ -272,10 +324,50 @@ class _ResidentAccountSettingsScreenState extends State<ResidentAccountSettingsS
                         },
                       ),
                       const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _contactController,
+                        decoration: InputDecoration(
+                          labelText: 'Contact Number',
+                          prefixIcon: const Icon(Icons.phone),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          filled: true,
+                          fillColor: Colors.grey[50],
+                        ),
+                        keyboardType: TextInputType.phone,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Please enter your contact number';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _addressController,
+                        decoration: InputDecoration(
+                          labelText: 'Address',
+                          prefixIcon: const Icon(Icons.location_on),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          filled: true,
+                          fillColor: Colors.grey[50],
+                        ),
+                        maxLines: 2,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Please enter your address';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton.icon(
-                          onPressed: _isLoading ? null : _updateName,
+                          onPressed: _isLoading ? null : _updatePersonalInfo,
                           icon: _isLoading 
                               ? const SizedBox(
                                   width: 16,
@@ -286,7 +378,7 @@ class _ResidentAccountSettingsScreenState extends State<ResidentAccountSettingsS
                                   ),
                                 )
                               : const Icon(Icons.save),
-                          label: Text(_isLoading ? 'Updating...' : 'Update Name'),
+                          label: Text(_isLoading ? 'Updating...' : 'Update Personal Information'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.blue,
                             foregroundColor: Colors.white,

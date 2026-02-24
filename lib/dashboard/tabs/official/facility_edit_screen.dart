@@ -158,7 +158,7 @@ class _FacilityEditScreenState extends State<FacilityEditScreen> {
       String successMessage = 'Failed to save facility';
 
       // Get user role from AuthApiService
-      final userData = await AuthApiService().getCurrentUser();
+      final userData = await AuthApiService.instance.getCurrentUser();
       final String? role = userData?['role'];
       print('🔍 DEBUG: User role = $role');
 

@@ -150,7 +150,7 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
   // Get auth service instance
   AuthApiService? get _authApiService {
     try {
-      return AuthApiService();
+      return AuthApiService.instance;
     } catch (e) {
       return null;
     }
@@ -160,7 +160,31 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
   void initState() {
     super.initState();
     _loadTimeSlotAvailability();
+    _loadUserData(); // Add auto-fill functionality
     // Note: Ban checking removed - user will implement new approach
+  }
+
+  // Auto-fill user data from profile
+  Future<void> _loadUserData() async {
+    try {
+      // Get current user data
+      final authApiService = AuthApiService.instance;
+      final currentUser = await authApiService.ensureUserLoaded();
+      
+      if (currentUser != null) {
+        setState(() {
+          _nameController.text = currentUser['full_name'] ?? '';
+          _contactController.text = currentUser['contact_number'] ?? '';
+          _addressController.text = currentUser['address'] ?? '';
+        });
+        print('🔍 Booking Form - Auto-filled with user data:');
+        print('  - Full Name: "${_nameController.text}"');
+        print('  - Contact: "${_contactController.text}"');
+        print('  - Address: "${_addressController.text}"');
+      }
+    } catch (e) {
+      print('❌ Error auto-filling user data: $e');
+    }
   }
 
   // Helper method to check if current user is an official
