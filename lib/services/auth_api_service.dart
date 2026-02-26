@@ -1,7 +1,9 @@
 import 'dart:convert';
+import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_service.dart';
+import 'data_service.dart';
 
 class AuthApiService {
   static AuthApiService? _instance;
@@ -714,5 +716,42 @@ class AuthApiService {
       return result;
     }
     return false;
+  }
+
+  // Verification Status Management - Data Isolation
+  static Map<String, dynamic>? _verificationStatus;
+
+  static Future<Map<String, dynamic>?> getVerificationStatus() async {
+    if (_verificationStatus == null) {
+      final instance = AuthApiService.instance;
+      final currentUser = await instance.getCurrentUser();
+      if (currentUser != null) {
+        final status = await DataService.checkVerificationStatus(currentUser['id']);
+        if (status['success']) {
+          _verificationStatus = status;
+        }
+      }
+    }
+    return _verificationStatus;
+  }
+
+  static Future<void> clearVerificationStatus() async {
+    _verificationStatus = null;
+  }
+
+  static Future<void> updateVerificationStatus(Map<String, dynamic> status) async {
+    _verificationStatus = status;
+  }
+
+  static bool canSubmitVerification() {
+    return _verificationStatus?['can_submit'] ?? true;
+  }
+
+  static String verificationLockMessage() {
+    return _verificationStatus?['lock_message'] ?? '';
+  }
+
+  static String currentVerificationStatus() {
+    return _verificationStatus?['current_status'] ?? 'none';
   }
 }

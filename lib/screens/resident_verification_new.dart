@@ -30,9 +30,12 @@ class _ResidentVerificationScreenState extends State<ResidentVerificationScreen>
   File? _idImage;
   String? _profileImageUrl;
   String? _idImageUrl;
+  // State variables for form locking
+  bool _canSubmit = true;
+  String _lockMessage = "";
   bool _isVerifiedResident = false;
   bool _isVerifiedNonResident = false;
-
+  
   @override
   void initState() {
     super.initState();
@@ -40,13 +43,32 @@ class _ResidentVerificationScreenState extends State<ResidentVerificationScreen>
     _checkVerificationStatus();
   }
 
-  void _checkVerificationStatus() {
-    // Get current user verification status
-    final authApiService = AuthApiService.instance;
-    _isVerifiedResident = authApiService.isVerifiedResident();
-    _isVerifiedNonResident = authApiService.isVerifiedNonResident();
+  void _checkVerificationStatus() async {
+    setState(() => _isLoading = true);
     
-    print('🔍 Verification Status - Resident: $_isVerifiedResident, Non-Resident: $_isVerifiedNonResident');
+    try {
+      final authApiService = AuthApiService.instance;
+      _isVerifiedResident = authApiService.isVerifiedResident();
+      _isVerifiedNonResident = authApiService.isVerifiedNonResident();
+      
+      // Check verification status for form locking
+      final verificationStatus = await AuthApiService.getVerificationStatus();
+      
+      setState(() {
+        _canSubmit = verificationStatus?['can_submit'] ?? true;
+        _lockMessage = verificationStatus?['lock_message'] ?? "";
+        _isLoading = false;
+      });
+      
+      print('🔍 Verification Status Check:');
+      print('  - Can Submit: $_canSubmit');
+      print('  - Lock Message: $_lockMessage');
+      print('  - Current Status: ${verificationStatus?['current_status']}');
+      
+    } catch (e) {
+      print('❌ Error checking verification status: $e');
+      setState(() => _isLoading = false);
+    }
   }
 
   void _initializeForm() async {
@@ -202,6 +224,17 @@ class _ResidentVerificationScreenState extends State<ResidentVerificationScreen>
   }
 
   Future<void> _submitVerification() async {
+    // Check if form can be submitted
+    if (!_canSubmit) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_lockMessage),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    
     if (!_formKey.currentState!.validate()) return;
 
     if (_selectedVerificationType.isEmpty) {
@@ -227,7 +260,7 @@ class _ResidentVerificationScreenState extends State<ResidentVerificationScreen>
     if (_idImage == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please upload a valid ID photo'),
+          content: Text('Please upload a valid ID'),
           backgroundColor: Colors.orange,
         ),
       );
@@ -270,6 +303,18 @@ class _ResidentVerificationScreenState extends State<ResidentVerificationScreen>
       final result = await ApiService.createVerificationRequest(verificationData);
       
       if (result['success']) {
+        // Update verification status after successful submission
+        await AuthApiService.updateVerificationStatus({
+          'success': true,
+          'can_submit': false,
+          'lock_message': 'You already submitted a Verification Request! wait for officials to either Reject or Approve your request',
+          'current_status': 'pending_request',
+          'verified': result['user']?['verified'] ?? 0,
+          'verification_type': result['user']?['verification_type'],
+          'user_id': result['user']?['id'],
+          'email': result['user']?['email'],
+        });
+        
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Verification submitted successfully!'),
@@ -313,6 +358,34 @@ class _ResidentVerificationScreenState extends State<ResidentVerificationScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Lock Message Display
+              if (!_canSubmit) ...[
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.orange[50],
+                    border: Border.all(color: Colors.orange[200]!),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    children: [
+                      Icon(Icons.info_outline, color: Colors.orange[600], size: 24),
+                      const SizedBox(height: 8),
+                      Text(
+                        _lockMessage,
+                        style: TextStyle(
+                          color: Colors.orange[800],
+                          fontWeight: FontWeight.w500,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              
               // Verification Info Card
               _buildInfoCard(),
 
@@ -326,7 +399,7 @@ class _ResidentVerificationScreenState extends State<ResidentVerificationScreen>
                     TextFormField(
                       controller: _nameController,
                       decoration: _buildInputDecoration('Full Name', Icons.person),
-                      enabled: !_isVerifiedResident, // Lock for verified residents
+                      enabled: _canSubmit, // Lock based on verification status
                       validator: (value) {
                         if (value == null || value.isEmpty) {
                           return 'Please enter your full name';
@@ -339,7 +412,7 @@ class _ResidentVerificationScreenState extends State<ResidentVerificationScreen>
                       controller: _contactController,
                       decoration: _buildInputDecoration('Contact Number', Icons.phone),
                       keyboardType: TextInputType.phone,
-                      enabled: !_isVerifiedResident, // Lock for verified residents
+                      enabled: _canSubmit, // Lock based on verification status
                       validator: (value) {
                         if (value == null || value.isEmpty) {
                           return 'Please enter your contact number';
@@ -352,7 +425,7 @@ class _ResidentVerificationScreenState extends State<ResidentVerificationScreen>
                       controller: _addressController,
                       decoration: _buildInputDecoration('Complete Address', Icons.location_on),
                       maxLines: 2,
-                      enabled: !_isVerifiedResident, // Lock for verified residents
+                      enabled: _canSubmit, // Lock based on verification status
                       validator: (value) {
                         if (value == null || value.isEmpty) {
                           return 'Please enter your address';
@@ -377,7 +450,7 @@ class _ResidentVerificationScreenState extends State<ResidentVerificationScreen>
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  onPressed: _isVerifiedResident ? null : (_isLoading ? null : _submitVerification), // Lock for verified residents
+                  onPressed: (_canSubmit && !_isLoading) ? _submitVerification : null, // Lock based on verification status
                   icon: _isLoading 
                       ? const SizedBox(
                           width: 20,
@@ -390,7 +463,7 @@ class _ResidentVerificationScreenState extends State<ResidentVerificationScreen>
                       : const Icon(Icons.verified_user),
                   label: Text(_isLoading ? 'Submitting...' : 'Submit Verification'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _isVerifiedResident ? Colors.grey : Colors.blue, // Grey for locked
+                    backgroundColor: _canSubmit ? Colors.blue : Colors.grey, // Blue for enabled, grey for locked
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
