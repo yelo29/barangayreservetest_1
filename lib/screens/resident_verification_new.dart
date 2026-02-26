@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import '../services/auth_api_service.dart';
 import '../services/api_service.dart';
 import '../services/base64_image_service.dart';
+import '../config/app_config.dart';
 
 class ResidentVerificationScreen extends StatefulWidget {
   final Map<String, dynamic>? userData;
@@ -26,6 +29,8 @@ class _ResidentVerificationScreenState extends State<ResidentVerificationScreen>
   // State variables
   String _selectedVerificationType = '';
   bool _isLoading = false;
+  bool _canSubmit = true;
+  String _lockMessage = '';
   File? _profileImage;
   File? _idImage;
   String? _profileImageUrl;
@@ -40,13 +45,53 @@ class _ResidentVerificationScreenState extends State<ResidentVerificationScreen>
     _checkVerificationStatus();
   }
 
-  void _checkVerificationStatus() {
+  void _checkVerificationStatus() async {
     // Get current user verification status
     final authApiService = AuthApiService.instance;
     _isVerifiedResident = authApiService.isVerifiedResident();
     _isVerifiedNonResident = authApiService.isVerifiedNonResident();
     
+    // Check for pending verification requests
+    try {
+      final currentUser = await authApiService.ensureUserLoaded();
+      if (currentUser != null && currentUser['id'] != null) {
+        final verificationStatus = await _checkPendingVerificationStatus(currentUser['id']);
+        if (verificationStatus != null) {
+          setState(() {
+            _canSubmit = verificationStatus['can_submit'] ?? true;
+            _lockMessage = verificationStatus['lock_message'] ?? '';
+          });
+        }
+      }
+    } catch (e) {
+      print('🔍 Error checking verification status: $e');
+    }
+    
     print('🔍 Verification Status - Resident: $_isVerifiedResident, Non-Resident: $_isVerifiedNonResident');
+    print('🔍 Can Submit: $_canSubmit, Lock Message: $_lockMessage');
+  }
+
+  Future<Map<String, dynamic>?> _checkPendingVerificationStatus(int userId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('${AppConfig.baseUrl}/api/verification-requests/status/$userId'),
+        headers: {'Content-Type': 'application/json'},
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true) {
+          return {
+            'can_submit': data['can_submit'],
+            'lock_message': data['lock_message'],
+            'current_status': data['current_status'],
+          };
+        }
+      }
+    } catch (e) {
+      print('🔍 Error fetching verification status: $e');
+    }
+    return null;
   }
 
   void _initializeForm() async {
@@ -373,11 +418,40 @@ class _ResidentVerificationScreenState extends State<ResidentVerificationScreen>
 
               const SizedBox(height: 32),
 
+              // Lock Message Display
+              if (!_canSubmit && _lockMessage.isNotEmpty) ...[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.orange[50],
+                    border: Border.all(color: Colors.orange[200]!),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    children: [
+                      Icon(Icons.lock, color: Colors.orange[600], size: 32),
+                      const SizedBox(height: 8),
+                      Text(
+                        _lockMessage,
+                        style: TextStyle(
+                          color: Colors.orange[800],
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
               // Submit Button
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  onPressed: _isVerifiedResident ? null : (_isLoading ? null : _submitVerification), // Lock for verified residents
+                  onPressed: (_isVerifiedResident || !_canSubmit) ? null : (_isLoading ? null : _submitVerification), // Lock for verified residents and pending requests
                   icon: _isLoading 
                       ? const SizedBox(
                           width: 20,

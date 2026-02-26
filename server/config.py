@@ -28,7 +28,7 @@ class Config:
     CORS_ORIGINS = os.getenv('CORS_ORIGINS', '*')
     
     # Database settings
-    DATABASE_PATH = os.getenv('DB_PATH', 'barangay.db')
+    DATABASE_PATH = os.getenv('DB_PATH', 'server/barangay.db')
     
     # DuckDNS settings (from environment)
     DUCKDNS_DOMAIN = os.getenv('DUCKDNS_DOMAIN', '')

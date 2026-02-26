@@ -1560,6 +1560,73 @@ def get_user_status(email):
         if 'conn' in locals():
             conn.close()
 
+# Verification Status Check - New endpoint for form locking
+@app.route('/api/verification-requests/status/<int:user_id>', methods=['GET'])
+def get_verification_status(user_id):
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Get user data with correct field names
+        cursor.execute('''
+            SELECT id, verified, email 
+            FROM users WHERE id = ?
+        ''', (user_id,))
+        user = cursor.fetchone()
+        
+        if not user:
+            conn.close()
+            return jsonify({'success': False, 'message': 'User not found'}), 404
+        
+        # Check pending requests with correct field names
+        cursor.execute('''
+            SELECT COUNT(*) as pending_count 
+            FROM verification_requests 
+            WHERE user_id = ? AND status = 'pending'
+        ''', (user_id,))
+        pending_result = cursor.fetchone()
+        has_pending = pending_result['pending_count'] > 0
+        
+        # Determine if can submit using correct field mapping
+        can_submit = True
+        lock_message = ""
+        current_status = "none"
+        
+        if user['verified'] == 1:  # Already verified resident
+            can_submit = False
+            lock_message = "You are already verified as a Resident with full benefits"
+            current_status = "verified_resident"
+        elif has_pending:
+            can_submit = False  
+            lock_message = "You already submitted a Verification Request! wait for officials to either Reject or Approve your request"
+            current_status = "pending_request"
+        else:  # Unverified resident (verified: 0 or 2)
+            can_submit = True
+            if user['verified'] == 2:
+                lock_message = "You can submit an upgrade request to Resident status"
+                current_status = "verified_non_resident"
+            else:
+                lock_message = "You can submit a verification request"
+                current_status = "unverified"
+        
+        conn.close()
+        
+        # Return with correct field mapping
+        return jsonify({
+            'success': True,
+            'can_submit': can_submit,
+            'lock_message': lock_message,
+            'current_status': current_status,
+            'verified': user['verified'],
+            'verification_type': None,  # Default since column doesn't exist
+            'user_id': user['id'],
+            'email': user['email']
+        })
+        
+    except Exception as e:
+        print(f"❌ Error checking verification status: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
 # Verification Requests
 @app.route('/api/verification-requests', methods=['GET', 'POST'])
 def verification_requests():
