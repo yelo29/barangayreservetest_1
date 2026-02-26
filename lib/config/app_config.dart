@@ -3,7 +3,7 @@
 
 class AppConfig {
   // Use actual computer IP and correct port from server log
-  static String _baseUrl = 'http://192.168.100.4:8000 ';
+  static String _baseUrl = 'http://192.168.28.105:8000 ';
   
   /// Get the current base URL
   static String get baseUrl => _baseUrl;
