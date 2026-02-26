@@ -83,7 +83,39 @@ class AuthApiService {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success'] == true) {
+          // Set current user
           _currentUser = data['user'];
+          
+          // CRITICAL: Clear verification status cache to prevent data isolation leaks
+          await clearVerificationStatus();
+          
+          // Save authentication token and persist session like in login
+          try {
+            final prefs = await SharedPreferences.getInstance();
+            
+            // Save auth token
+            if (data['token'] != null) {
+              await prefs.setString('auth_token', data['token']);
+              print('🔍 Saved auth token during registration');
+            }
+            
+            // Save user data
+            await prefs.setString('user_email', _currentUser!['email'] ?? '');
+            await prefs.setString('user_full_name', _currentUser!['full_name'] ?? '');
+            await prefs.setString('user_role', _currentUser!['role'] ?? '');
+            await prefs.setBool('user_verified', _currentUser!['verified'] ?? false);
+            await prefs.setString('user_verification_type', _currentUser!['verification_type']?.toString() ?? '');
+            await prefs.setDouble('user_discount_rate', (_currentUser!['discount_rate'] ?? 0).toDouble());
+            await prefs.setString('user_contact_number', _currentUser!['contact_number'] ?? '');
+            await prefs.setString('user_address', _currentUser!['address'] ?? '');
+            await prefs.setString('user_created_at', _currentUser!['created_at'] ?? '');
+            await prefs.setInt('user_id', _currentUser!['id'] ?? 0);
+            
+            print('🔍 Saved user session during registration');
+          } catch (e) {
+            print('❌ AuthApiService SharedPreferences error during registration: $e');
+          }
+          
           return data;
         } else {
           return {'success': false, 'message': data['message'] ?? 'Registration failed'};
@@ -172,6 +204,9 @@ class AuthApiService {
         print('🔍 AuthApiService: Boolean conversion completed');
         
         _currentUser = user;
+        
+        // CRITICAL: Clear verification status cache to prevent data isolation leaks
+        await clearVerificationStatus();
         
         // Note: Ban checking removed - user will implement new approach
         
@@ -273,6 +308,10 @@ class AuthApiService {
         user['is_active'] = user['is_active'] == 1 || user['is_active'] == true;
         
         _currentUser = user;
+        
+        // CRITICAL: Clear verification status cache to prevent data isolation leaks
+        await clearVerificationStatus();
+        
         print('✅ User restored successfully');
         
         // Load profile photo from SharedPreferences as fallback
@@ -722,17 +761,19 @@ class AuthApiService {
   static Map<String, dynamic>? _verificationStatus;
 
   static Future<Map<String, dynamic>?> getVerificationStatus() async {
-    if (_verificationStatus == null) {
-      final instance = AuthApiService.instance;
-      final currentUser = await instance.getCurrentUser();
-      if (currentUser != null) {
-        final status = await DataService.checkVerificationStatus(currentUser['id']);
-        if (status['success']) {
-          _verificationStatus = status;
-        }
+    // Always fetch fresh verification status to prevent data isolation leaks
+    // Remove caching to ensure real-time data consistency
+    
+    final instance = AuthApiService.instance;
+    final currentUser = await instance.getCurrentUser();
+    if (currentUser != null) {
+      final status = await DataService.checkVerificationStatus(currentUser['id']);
+      if (status['success']) {
+        _verificationStatus = status;
+        return status;
       }
     }
-    return _verificationStatus;
+    return null;
   }
 
   static Future<void> clearVerificationStatus() async {
