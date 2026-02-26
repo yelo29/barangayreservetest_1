@@ -438,30 +438,7 @@ class _OfficialAuthenticationTabState extends State<OfficialAuthenticationTab> {
           if (imageUrl != null && imageUrl.isNotEmpty)
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
-              child: Image.memory(
-                base64.decode(imageUrl.startsWith('data:') ? imageUrl.split(',')[1] : imageUrl),
-                fit: BoxFit.cover,
-                width: double.infinity,
-                height: double.infinity,
-                errorBuilder: (context, error, stackTrace) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.broken_image, size: 32, color: Colors.grey[600]),
-                        const SizedBox(height: 4),
-                        Text(
-                          title,
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
+              child: _buildValidImage(imageUrl)
             )
           else
             Center(
@@ -686,6 +663,68 @@ class _OfficialAuthenticationTabState extends State<OfficialAuthenticationTab> {
           title: title,
           base64Image: base64Image,
         ),
+      ),
+    );
+  }
+
+  // Helper method to safely build image from Base64 with validation
+  Widget _buildValidImage(String imageUrl) {
+    try {
+      // Extract Base64 string if it's a data URL
+      String base64String = imageUrl.startsWith('data:') 
+          ? imageUrl.split(',')[1] 
+          : imageUrl;
+      
+      // Validate Base64 string
+      if (base64String.isEmpty) {
+        return _buildImagePlaceholder();
+      }
+      
+      // Check if Base64 string has valid padding
+      String normalizedBase64 = base64String
+          .replaceAll(RegExp(r'\s'), '') // Remove whitespace
+          .replaceAll(RegExp(r'[^A-Za-z0-9+/=]'), ''); // Remove invalid chars
+      
+      // Add proper padding if missing
+      int paddingLength = (4 - (normalizedBase64.length % 4)) % 4;
+      if (paddingLength > 0) {
+        normalizedBase64 += '=' * paddingLength;
+      }
+      
+      // Try to decode
+      final imageBytes = base64.decode(normalizedBase64);
+      
+      return Image.memory(
+        imageBytes,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+        errorBuilder: (context, error, stackTrace) {
+          print('❌ Error displaying image: $error');
+          return _buildImagePlaceholder();
+        },
+      );
+    } catch (e) {
+      print('❌ Base64 decoding error: $e');
+      return _buildImagePlaceholder();
+    }
+  }
+
+  Widget _buildImagePlaceholder() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.broken_image, size: 32, color: Colors.grey[600]),
+          const SizedBox(height: 4),
+          Text(
+            'Invalid Image',
+            style: TextStyle(
+              color: Colors.grey[600],
+              fontSize: 12,
+            ),
+          ),
+        ],
       ),
     );
   }
