@@ -5,6 +5,7 @@ import '../services/auth_api_service.dart';
 import '../services/data_service.dart';
 import '../dashboard/resident_dashboard.dart';
 import '../screens/selection_screen.dart';
+import '../screens/email_verification_screen.dart';
 
 class ResidentLoginScreen extends StatefulWidget {
   const ResidentLoginScreen({super.key});
@@ -101,39 +102,54 @@ class _ResidentLoginScreenState extends State<ResidentLoginScreen> {
       if (result['success']) {
         print('✅ Server Registration successful!');
         
-        // AUTO-LOGIN AFTER REGISTRATION
-        print('🔥 Auto-logging in after registration...');
-        final loginResult = await AuthApiService.instance.signInWithEmailAndPassword(
-          _emailController.text.trim(),
-          _passwordController.text.trim(),
-        );
-        
-        if (loginResult['success'] && mounted) {
-          print('✅ Auto-login successful!');
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => ResidentDashboard(onLogout: (context) async {
-              print('🔥 Resident logout - clearing authentication data');
-              
-              // Clear authentication data
-              await AuthApiService.instance.signOut();
-              await ApiService.clearUserData();
-              
-              // Navigate back to selection screen
-              if (context.mounted) {
-                Navigator.pushReplacement(
-                  context, 
-                  MaterialPageRoute(builder: (_) => const SelectionScreen())
-                );
-              }
-            })),
-          );
-        } else {
-          print('❌ Auto-login failed: ${loginResult['message']}');
+        // Check if email verification is required
+        if (result['requires_email_verification'] == true) {
+          print('🔥 Email verification required - redirecting to OTP screen');
           if (mounted) {
-            setState(() {
-              _errorMessage = 'Registration successful but login failed. Please try logging in manually.';
-            });
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (_) => EmailVerificationScreen(
+                  email: _emailController.text.trim(),
+                ),
+              ),
+            );
+          }
+        } else {
+          // Legacy flow - auto-login (for backward compatibility)
+          print('🔥 Auto-logging in after registration...');
+          final loginResult = await AuthApiService.instance.signInWithEmailAndPassword(
+            _emailController.text.trim(),
+            _passwordController.text.trim(),
+          );
+          
+          if (loginResult['success'] && mounted) {
+            print('✅ Auto-login successful!');
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => ResidentDashboard(onLogout: (context) async {
+                print('🔥 Resident logout - clearing authentication data');
+                
+                // Clear authentication data
+                await AuthApiService.instance.signOut();
+                await ApiService.clearUserData();
+                
+                // Navigate back to selection screen
+                if (context.mounted) {
+                  Navigator.pushReplacement(
+                    context, 
+                    MaterialPageRoute(builder: (_) => const SelectionScreen())
+                  );
+                }
+              })),
+            );
+          } else {
+            print('❌ Auto-login failed: ${loginResult['message']}');
+            if (mounted) {
+              setState(() {
+                _errorMessage = 'Registration successful but login failed. Please try logging in manually.';
+              });
+            }
           }
         }
       } else {

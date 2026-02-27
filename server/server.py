@@ -8,8 +8,13 @@ from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import sqlite3
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
+import random
+import string
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from config import Config
 
 app = Flask(__name__)
@@ -102,8 +107,71 @@ def init_db():
         )
     ''')
     
+    # Create OTP table for email verification
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS email_otps (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT NOT NULL,
+            otp_code TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            expires_at DATETIME NOT NULL,
+            is_used BOOLEAN DEFAULT FALSE,
+            FOREIGN KEY (email) REFERENCES users (email)
+        )
+    ''')
+    
     conn.commit()
     conn.close()
+
+# Email service configuration
+EMAIL_CONFIG = {
+    'smtp_server': 'smtp.gmail.com',
+    'smtp_port': 587,
+    'email': 'leo052904@gmail.com',
+    'password': 'tqlf yzje rxkc lnkn'
+}
+
+def generate_otp():
+    """Generate 6-digit OTP code"""
+    return ''.join(random.choices(string.digits, k=6))
+
+def send_otp_email(email, otp_code):
+    """Send OTP code to user's email"""
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = EMAIL_CONFIG['email']
+        msg['To'] = email
+        msg['Subject'] = 'Barangay Reserve - Email Verification Code'
+        
+        body = f'''
+        Hello,
+        
+        Your email verification code for Barangay Reserve is:
+        
+        {otp_code}
+        
+        This code will expire in 10 minutes.
+        
+        If you didn't request this code, please ignore this email.
+        
+        Thank you,
+        Barangay Reserve Team
+        '''
+        
+        msg.attach(MIMEText(body, 'plain'))
+        
+        server = smtplib.SMTP(EMAIL_CONFIG['smtp_server'], EMAIL_CONFIG['smtp_port'])
+        server.starttls()
+        server.login(EMAIL_CONFIG['email'], EMAIL_CONFIG['password'])
+        text = msg.as_string()
+        server.sendmail(EMAIL_CONFIG['email'], email, text)
+        server.quit()
+        
+        print(f"✅ OTP email sent to {email}")
+        return True
+    except Exception as e:
+        print(f"❌ Failed to send OTP email: {e}")
+        return False
 
 # Initialize database on startup
 init_db()
@@ -1037,10 +1105,10 @@ def register():
         print(f"🔍 DEBUG: Address: '{data.get('address')}'")
         
         cursor.execute('''
-            INSERT INTO users (email, password, full_name, role, contact_number, address)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO users (email, password, full_name, role, contact_number, address, email_verified)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         ''', (data['email'], password_hash, data['name'], data['role'], 
-              data.get('contact_number'), data.get('address')))
+              data.get('contact_number'), data.get('address'), False))
         
         print("🔍 DEBUG: Database insertion completed")
         
@@ -1054,27 +1122,29 @@ def register():
         conn.commit()
         conn.close()
         
-        # Generate session token for automatic login after registration
-        import uuid
-        session_token = str(uuid.uuid4())
+        # Generate OTP for email verification
+        otp_code = generate_otp()
+        expires_at = datetime.now() + timedelta(minutes=10)
+        
+        # Store OTP in database
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO email_otps (email, otp_code, expires_at)
+            VALUES (?, ?, ?)
+        ''', (data['email'], otp_code, expires_at.isoformat()))
+        conn.commit()
+        conn.close()
+        
+        # Send OTP email
+        email_sent = send_otp_email(data['email'], otp_code)
         
         return jsonify({
             'success': True, 
-            'message': 'User registered successfully',
-            'token': session_token,  # CRITICAL: Add token for automatic login
-            'user': {
-                'id': user[0],
-                'email': user[1],
-                'full_name': user[3],
-                'role': user[4],
-                'verified': bool(user[5]),
-                'verification_type': user[6] if len(user) > 6 else None,  # Include verification_type
-                'discount_rate': user[7] if len(user) > 7 else 0,  # Include discount_rate
-                'contact_number': user[8] if len(user) > 8 else None,
-                'address': user[9] if len(user) > 9 else None,
-                'created_at': user[15] if len(user) > 15 else user[9],  # Fixed index for created_at
-                'is_authenticated': True  # CRITICAL: Mark as authenticated
-            }
+            'message': 'User registered successfully. Please check your email for verification code.',
+            'requires_email_verification': True,
+            'email': data['email'],
+            'email_sent': email_sent
         })
     except Exception as e:
         print(f"❌ Registration error: {e}")
@@ -1089,6 +1159,129 @@ def register():
             'success': False,
             'message': 'Email already exists'
         }), 400
+
+@app.route('/api/auth/verify-email-otp', methods=['POST'])
+def verify_email_otp():
+    data = request.json
+    
+    if not data.get('email') or not data.get('otp_code'):
+        return jsonify({
+            'success': False,
+            'message': 'Email and OTP code are required'
+        }), 400
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    try:
+        # Find valid OTP for this email
+        cursor.execute('''
+            SELECT otp_code, expires_at, is_used FROM email_otps 
+            WHERE email = ? AND otp_code = ? AND is_used = FALSE
+            ORDER BY created_at DESC LIMIT 1
+        ''', (data['email'], data['otp_code']))
+        
+        otp_record = cursor.fetchone()
+        
+        if not otp_record:
+            conn.close()
+            return jsonify({
+                'success': False,
+                'message': 'Invalid or expired OTP code'
+            }), 400
+        
+        # Check if OTP is expired
+        expires_at = datetime.fromisoformat(otp_record[1])
+        if datetime.now() > expires_at:
+            conn.close()
+            return jsonify({
+                'success': False,
+                'message': 'OTP code has expired'
+            }), 400
+        
+        # Mark OTP as used
+        cursor.execute('''
+            UPDATE email_otps SET is_used = TRUE 
+            WHERE email = ? AND otp_code = ?
+        ''', (data['email'], data['otp_code']))
+        
+        # Update user email_verified status
+        cursor.execute('''
+            UPDATE users SET email_verified = TRUE 
+            WHERE email = ?
+        ''', (data['email'],))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Email verified successfully. You can now log in.',
+            'redirect_to_login': True
+        })
+        
+    except Exception as e:
+        print(f"❌ OTP verification error: {e}")
+        conn.close()
+        return jsonify({
+            'success': False,
+            'message': f'Verification failed: {str(e)}'
+        }), 500
+
+@app.route('/api/auth/resend-otp', methods=['POST'])
+def resend_otp():
+    data = request.json
+    
+    if not data.get('email'):
+        return jsonify({
+            'success': False,
+            'message': 'Email is required'
+        }), 400
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    try:
+        # Check if user exists
+        cursor.execute('SELECT id FROM users WHERE email = ?', (data['email'],))
+        user = cursor.fetchone()
+        
+        if not user:
+            conn.close()
+            return jsonify({
+                'success': False,
+                'message': 'User not found'
+            }), 404
+        
+        # Generate new OTP
+        otp_code = generate_otp()
+        expires_at = datetime.now() + timedelta(minutes=10)
+        
+        # Store new OTP
+        cursor.execute('''
+            INSERT INTO email_otps (email, otp_code, expires_at)
+            VALUES (?, ?, ?)
+        ''', (data['email'], otp_code, expires_at.isoformat()))
+        
+        conn.commit()
+        conn.close()
+        
+        # Send OTP email
+        email_sent = send_otp_email(data['email'], otp_code)
+        
+        return jsonify({
+            'success': True,
+            'message': 'New OTP code sent to your email',
+            'email_sent': email_sent
+        })
+        
+    except Exception as e:
+        print(f"❌ Resend OTP error: {e}")
+        conn.close()
+        return jsonify({
+            'success': False,
+            'message': f'Failed to resend OTP: {str(e)}'
+        }), 500
 
 # Add sample data
 @app.route('/api/setup-sample-data', methods=['POST'])
