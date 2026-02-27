@@ -169,16 +169,13 @@ class EmailService:
                 
                 <p>If you believe this is an error or have questions about this decision, please contact the barangay office.</p>
                 
-                <div style="text-align: center; margin: 30px 0;">
-                    <a href="#" class="btn">📅 Book Another Time</a>
-                    <a href="#" class="btn">📞 Contact Office</a>
-                </div>
+                
                 
                 <p>Thank you for your understanding.</p>
             </div>
             
             <div class="footer">
-                <p>© 2024 Barangay Management System | This is an automated message, please do not reply to this email.</p>
+                <p>© 2025 Barangay Management System | This is an automated message, please do not reply to this email.</p>
             </div>
         </body>
         </html>
@@ -277,16 +274,13 @@ class EmailService:
                 
                 <p>Please arrive on time and bring any necessary documents or equipment for your activity.</p>
                 
-                <div style="text-align: center; margin: 30px 0;">
-                    <a href="#" class="btn">📅 View My Bookings</a>
-                    <a href="#" class="btn">📞 Contact Office</a>
-                </div>
+                
                 
                 <p>We look forward to serving you!</p>
             </div>
             
             <div class="footer">
-                <p>© 2024 Barangay Management System | This is an automated message, please do not reply to this email.</p>
+                <p>© 2025 Barangay Management System | This is an automated message, please do not reply to this email.</p>
             </div>
         </body>
         </html>
@@ -393,16 +387,13 @@ class EmailService:
                     <li>📋 Enhanced booking privileges</li>
                 </ul>
                 
-                <div style="text-align: center; margin: 30px 0;">
-                    <a href="#" class="btn">📅 Book a Facility</a>
-                    <a href="#" class="btn">👤 View Profile</a>
-                </div>
+                
                 
                 <p>Thank you for completing the verification process!</p>
             </div>
             
             <div class="footer">
-                <p>© 2024 Barangay Management System | This is an automated message, please do not reply to this email.</p>
+                <p>© 2025 Barangay Management System | This is an automated message, please do not reply to this email.</p>
             </div>
         </body>
         </html>
@@ -508,16 +499,13 @@ class EmailService:
                     <li>Submit a new verification request with complete requirements</li>
                 </ol>
                 
-                <div style="text-align: center; margin: 30px 0;">
-                    <a href="#" class="btn">📄 Submit New Request</a>
-                    <a href="#" class="btn">📞 Contact Office</a>
-                </div>
+                
                 
                 <p>Thank you for your understanding.</p>
             </div>
             
             <div class="footer">
-                <p>© 2024 Barangay Management System | This is an automated message, please do not reply to this email.</p>
+                <p>© 2025 Barangay Management System | This is an automated message, please do not reply to this email.</p>
             </div>
         </body>
         </html>
