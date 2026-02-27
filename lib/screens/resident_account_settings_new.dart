@@ -25,6 +25,7 @@ class _ResidentAccountSettingsScreenState extends State<ResidentAccountSettingsS
   bool _isLoadingContact = false;
   bool _isUploadingPhoto = false;
   List<Map<String, dynamic>> _officials = [];
+  Map<String, dynamic>? _currentUser;
 
   @override
   void initState() {
@@ -50,22 +51,26 @@ class _ResidentAccountSettingsScreenState extends State<ResidentAccountSettingsS
       
       if (currentUser != null) {
         setState(() {
+          _currentUser = currentUser;
           _nameController.text = currentUser['full_name'] ?? '';
           _contactController.text = currentUser['contact_number'] ?? '';
           _addressController.text = currentUser['address'] ?? '';
         });
         print('🔍 Account Settings - Loaded fresh data from server:');
+        print('  - Email: "${currentUser['email']}"');
         print('  - Full Name: "${_nameController.text}"');
         print('  - Contact: "${_contactController.text}"');
         print('  - Address: "${_addressController.text}"');
       } else if (widget.userData != null) {
         // Fallback to widget data
         setState(() {
+          _currentUser = widget.userData;
           _nameController.text = widget.userData!['full_name'] ?? '';
           _contactController.text = widget.userData!['contact_number'] ?? '';
           _addressController.text = widget.userData!['address'] ?? '';
         });
         print('🔍 Account Settings - Loaded fallback data:');
+        print('  - Email: "${widget.userData!['email']}"');
         print('  - Full Name: "${_nameController.text}"');
         print('  - Contact: "${_contactController.text}"');
         print('  - Address: "${_addressController.text}"');
@@ -75,6 +80,7 @@ class _ResidentAccountSettingsScreenState extends State<ResidentAccountSettingsS
       // Fallback to widget data
       if (widget.userData != null) {
         setState(() {
+          _currentUser = widget.userData;
           _nameController.text = widget.userData!['full_name'] ?? '';
           _contactController.text = widget.userData!['contact_number'] ?? '';
           _addressController.text = widget.userData!['address'] ?? '';
@@ -299,7 +305,7 @@ class _ResidentAccountSettingsScreenState extends State<ResidentAccountSettingsS
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              widget.userData?['email'] ?? 'resident@example.com',
+                              _currentUser?['email'] ?? widget.userData?['email'] ?? 'resident@example.com',
                               style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
@@ -307,7 +313,7 @@ class _ResidentAccountSettingsScreenState extends State<ResidentAccountSettingsS
                               ),
                             ),
                             const SizedBox(height: 4),
-                            if (widget.userData?['verified'] == true)
+                            if ((_currentUser?['verified'] == true) || (widget.userData?['verified'] == true))
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                 decoration: BoxDecoration(

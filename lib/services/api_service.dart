@@ -724,6 +724,56 @@ class ApiService {
     }
   }
 
+  // Email OTP Verification Methods
+  static Future<Map<String, dynamic>> verifyEmailOTP(String email, String otpCode) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/auth/verify-email-otp'),
+        headers: await getHeaders(includeAuth: false),
+        body: json.encode({
+          'email': email,
+          'otp_code': otpCode,
+        }),
+      );
+
+      final data = json.decode(response.body);
+      print('🔍 Email OTP verification response: $data');
+      
+      if (response.statusCode == 200) {
+        return data;
+      } else {
+        return {'success': false, 'message': 'Failed to verify OTP'};
+      }
+    } catch (e) {
+      print('❌ verifyEmailOTP error: $e');
+      return {'success': false, 'message': e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> resendOTP(String email) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/auth/resend-otp'),
+        headers: await getHeaders(includeAuth: false),
+        body: json.encode({
+          'email': email,
+        }),
+      );
+
+      final data = json.decode(response.body);
+      print('🔍 Resend OTP response: $data');
+      
+      if (response.statusCode == 200) {
+        return data;
+      } else {
+        return {'success': false, 'message': 'Failed to resend OTP'};
+      }
+    } catch (e) {
+      print('❌ resendOTP error: $e');
+      return {'success': false, 'message': e.toString()};
+    }
+  }
+
   /// Handle API response and check for ban status
   static Future<Map<String, dynamic>> _handleApiResponse(
     Map<String, dynamic> response, 
