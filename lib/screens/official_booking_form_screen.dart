@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:http/http.dart' as http;
 import '../services/api_service.dart' as api_service;
 import '../services/data_service.dart';
+import '../services/auto_refresh_service.dart';
 import '../utils/debug_logger.dart';
 import '../services/auth_api_service.dart';
 import '../widgets/loading_widget.dart';
@@ -27,7 +28,7 @@ class OfficialBookingFormScreen extends StatefulWidget {
   State<OfficialBookingFormScreen> createState() => _OfficialBookingFormScreenState();
 }
 
-class _OfficialBookingFormScreenState extends State<OfficialBookingFormScreen> {
+class _OfficialBookingFormScreenState extends State<OfficialBookingFormScreen> with AutoRefreshMixin {
   final _formKey = GlobalKey<FormState>();
   
   bool _isLoadingTimeSlots = true;
@@ -41,6 +42,18 @@ class _OfficialBookingFormScreenState extends State<OfficialBookingFormScreen> {
   @override
   void initState() {
     super.initState();
+    
+    // Initialize auto-refresh for official booking form
+    initAutoRefresh('official_booking_form');
+    
+    // Register refresh callback for calendar updates
+    registerRefreshCallback(() {
+      if (mounted) {
+        _loadTimeSlots();
+        _loadResidentBookings();
+      }
+    });
+    
     _initializeData();
   }
 

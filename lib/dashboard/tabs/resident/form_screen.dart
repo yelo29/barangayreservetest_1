@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import '../../../services/auth_api_service.dart';
 import '../../../services/api_service.dart';
+import '../../../services/auto_refresh_service.dart';
 import '../../../services/base64_image_service.dart';
 import '../../../models/facility_model.dart';
 import '../../../config/app_config.dart';
@@ -29,7 +30,7 @@ class FormScreen extends StatefulWidget {
   State<FormScreen> createState() => _FormScreenState();
 }
 
-class _FormScreenState extends State<FormScreen> {
+class _FormScreenState extends State<FormScreen> with AutoRefreshMixin {
   final FirebaseService _firebaseService = FirebaseService();
   final ImagePicker _imagePicker = ImagePicker();
 
@@ -67,6 +68,17 @@ class _FormScreenState extends State<FormScreen> {
     super.initState();
     DebugLogger.ui('ResidentBookingFormScreen initialized');
     print('🔍 QR Code: Form screen initialized - QR code should be visible');
+    
+    // Initialize auto-refresh for booking form
+    initAutoRefresh('booking_form');
+    
+    // Register refresh callback for calendar updates
+    registerRefreshCallback(() {
+      if (mounted && widget.onBookingSubmitted != null) {
+        widget.onBookingSubmitted!();
+      }
+    });
+    
     _initializeForm();
   }
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../services/data_service.dart';
 import '../../../screens/official_account_settings_screen.dart';
 import '../../../services/auth_api_service.dart';
+import '../../../services/auto_refresh_service.dart';
 
 class OfficialProfileTab extends StatefulWidget {
   final Function(BuildContext) onLogout;
@@ -12,7 +13,7 @@ class OfficialProfileTab extends StatefulWidget {
   State<OfficialProfileTab> createState() => _OfficialProfileTabState();
 }
 
-class _OfficialProfileTabState extends State<OfficialProfileTab> {
+class _OfficialProfileTabState extends State<OfficialProfileTab> with AutoRefreshMixin {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _contactController = TextEditingController();
@@ -22,6 +23,17 @@ class _OfficialProfileTabState extends State<OfficialProfileTab> {
   @override
   void initState() {
     super.initState();
+    
+    // Initialize auto-refresh for official profile tab
+    initAutoRefresh('official_profile');
+    
+    // Register refresh callback for profile updates
+    registerRefreshCallback(() {
+      if (mounted) {
+        _loadOfficialData();
+      }
+    });
+    
     _loadOfficialData();
   }
 
