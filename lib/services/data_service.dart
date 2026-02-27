@@ -400,7 +400,7 @@ class DataService {
         // Trigger auto-refresh if verification status was updated successfully and refresh_data is provided
         if (data['success'] == true && data.containsKey('refresh_data')) {
           print('🔄 Triggering auto-refresh for verification status update');
-          AutoRefreshService().triggerAutoRefresh(data['refresh_data']);
+          await AutoRefreshService().triggerAutoRefresh(data['refresh_data']);
         }
         
         return {
@@ -490,7 +490,7 @@ class DataService {
         // Trigger auto-refresh if profile was updated successfully and refresh_data is provided
         if (data['success'] == true && data.containsKey('refresh_data')) {
           print('🔄 Triggering auto-refresh for profile update');
-          AutoRefreshService().triggerAutoRefresh(data['refresh_data']);
+          await AutoRefreshService().triggerAutoRefresh(data['refresh_data']);
         }
         
         return {

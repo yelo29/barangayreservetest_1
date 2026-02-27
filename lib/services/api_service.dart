@@ -285,7 +285,7 @@ class ApiService {
         // Trigger auto-refresh if booking was successful and refresh_data is provided
         if (data['success'] == true && data.containsKey('refresh_data')) {
           print('🔄 Triggering auto-refresh for booking creation');
-          AutoRefreshService().triggerAutoRefresh(data['refresh_data']);
+          await AutoRefreshService().triggerAutoRefresh(data['refresh_data']);
         }
         
         // Handle response and check for ban status
@@ -306,6 +306,36 @@ class ApiService {
       }
     } catch (e) {
       print('❌ createBooking exception: $e');
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  // Check booking conflict
+  static Future<Map<String, dynamic>> checkBookingConflict(Map<String, dynamic> bookingData) async {
+    try {
+      print('🔍 checkBookingConflict called with data: $bookingData');
+      
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/bookings/check-conflict'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode(bookingData),
+      );
+
+      print('🔍 checkBookingConflict response status: ${response.statusCode}');
+      print('🔍 checkBookingConflict response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true) {
+          return data;
+        } else {
+          return {'success': false, 'error': data['message'] ?? 'Failed to check conflict'};
+        }
+      } else {
+        return {'success': false, 'error': 'HTTP ${response.statusCode}'};
+      }
+    } catch (e) {
+      print('❌ checkBookingConflict exception: $e');
       return {'success': false, 'error': e.toString()};
     }
   }
