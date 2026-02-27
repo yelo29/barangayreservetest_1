@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'base64_image_service.dart';
 import '../config/app_config.dart';
 import 'ban_detection_service.dart';
+import 'auto_refresh_service.dart';
 
 class ApiService {
   // Dynamic server URL - works with Python Flask server
@@ -280,6 +281,12 @@ class ApiService {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
+        
+        // Trigger auto-refresh if booking was successful and refresh_data is provided
+        if (data['success'] == true && data.containsKey('refresh_data')) {
+          print('🔄 Triggering auto-refresh for booking creation');
+          AutoRefreshService().triggerAutoRefresh(data['refresh_data']);
+        }
         
         // Handle response and check for ban status
         return await _handleApiResponse(data, 'createBooking');

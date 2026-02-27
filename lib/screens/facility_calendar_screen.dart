@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:intl/intl.dart';
 import '../services/data_service.dart';
 import '../services/auth_api_service.dart';
+import '../services/auto_refresh_service.dart';
 import '../widgets/enhanced_calendar.dart';
 import '../widgets/loading_widget.dart';
 import '../utils/debug_logger.dart';
@@ -23,7 +24,7 @@ class FacilityCalendarScreen extends StatefulWidget {
   State<FacilityCalendarScreen> createState() => _FacilityCalendarScreenState();
 }
 
-class _FacilityCalendarScreenState extends State<FacilityCalendarScreen> {
+class _FacilityCalendarScreenState extends State<FacilityCalendarScreen> with AutoRefreshMixin {
   bool _isLoading = true;
   Map<String, dynamic>? _currentUser;
   final AuthApiService _authApiService = AuthApiService.instance;
@@ -105,6 +106,17 @@ class _FacilityCalendarScreenState extends State<FacilityCalendarScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    
+    // Initialize auto-refresh for calendar view
+    initAutoRefresh('calendar_view');
+    
+    // Register refresh callback for booking data updates
+    registerRefreshCallback(() {
+      if (mounted) {
+        _loadBookingData();
+      }
+    });
+    
     // Refresh data when tab becomes visible again
     if (mounted) {
       _loadBookingData();

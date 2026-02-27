@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import '../../../services/data_service.dart';
 import '../../../services/auth_api_service.dart';
+import '../../../services/auto_refresh_service.dart';
 import '../../../screens/resident_account_settings_new.dart';
 import '../../../screens/resident_verification_new.dart';
 import '../../../main.dart';
@@ -20,7 +21,7 @@ class ResidentProfileTab extends StatefulWidget {
   State<ResidentProfileTab> createState() => _ResidentProfileTabState();
 }
 
-class _ResidentProfileTabState extends State<ResidentProfileTab> {
+class _ResidentProfileTabState extends State<ResidentProfileTab> with AutoRefreshMixin {
   Map<String, dynamic>? _currentUser;
   AuthApiService _authApiService = AuthApiService.instance;
   bool _isLoading = true;
@@ -29,7 +30,38 @@ class _ResidentProfileTabState extends State<ResidentProfileTab> {
   @override
   void initState() {
     super.initState();
+    
+    // Initialize auto-refresh for profile tab
+    initAutoRefresh('user_profile');
+    
+    // Register refresh callback for profile updates
+    registerRefreshCallback(() {
+      if (mounted) {
+        _loadUserData();
+      }
+    });
+    
     _loadUserData();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    
+    // Refresh cached user data when tab is accessed (like Account Settings does)
+    if (mounted) {
+      _refreshCachedUserData();
+    }
+  }
+
+  Future<void> _refreshCachedUserData() async {
+    try {
+      print('🔄 ResidentProfileTab - Refreshing cached user data (like Account Settings)');
+      await _authApiService.refreshCurrentUser();
+      print('🔄 ResidentProfileTab - Cached data refreshed');
+    } catch (e) {
+      print('❌ ResidentProfileTab - Error refreshing cached data: $e');
+    }
   }
 
   Future<void> _loadUserData() async {
@@ -39,6 +71,15 @@ class _ResidentProfileTabState extends State<ResidentProfileTab> {
       
       if (profileResponse['success'] == true) {
         final currentUser = profileResponse['data'];
+        
+        // Debug: Print the entire profile data structure
+        print('🔍 DEBUG: Profile response data structure:');
+        print('🔍 DEBUG: Full data: $currentUser');
+        if (currentUser is Map) {
+          print('🔍 DEBUG: Available fields: ${currentUser.keys.toList()}');
+          print('🔍 DEBUG: profile_photo_url field exists: ${currentUser.containsKey('profile_photo_url')}');
+          print('🔍 DEBUG: profile_photo_url value: ${currentUser['profile_photo_url']}');
+        }
         
         // Also get current user data from AuthApiService for consistency
         final authUser = await _authApiService.getCurrentUser();
@@ -51,6 +92,20 @@ class _ResidentProfileTabState extends State<ResidentProfileTab> {
         print('🔍 ResidentProfileTab - User profile loaded from DataService: $currentUser');
         print('🔍 ResidentProfileTab - Verified status: ${_currentUser?['verified']}');
         print('🔍 ResidentProfileTab - Discount rate: ${_currentUser?['discount_rate']}');
+        
+        // Load profile photo using same method as Account Settings (from SharedPreferences cache)
+        if (_currentUser != null) {
+          _profilePhotoUrl = await _authApiService.getUserProfilePhoto();
+          print('🔍 ResidentProfileTab - Profile photo URL from AuthApiService (same as Account Settings): $_profilePhotoUrl');
+          
+          // Also check if profile photo exists in user data for debugging
+          final userPhotoUrl = _currentUser!['profile_photo_url'];
+          print('🔍 ResidentProfileTab - Profile photo URL from user data: $userPhotoUrl');
+          print('🔍 ResidentProfileTab - Using cached photo (Account Settings method): ${_profilePhotoUrl?.isNotEmpty ?? false}');
+        }
+        
+        print('🔍 ResidentProfileTab - isVerifiedResident: ${_authApiService.isVerifiedResident()}');
+        print('🔍 ResidentProfileTab - isVerifiedNonResident: ${_authApiService.isVerifiedNonResident()}');
       } else {
         // Fallback to AuthApiService if DataService fails
         await _authApiService.restoreUserFromToken();
@@ -59,16 +114,14 @@ class _ResidentProfileTabState extends State<ResidentProfileTab> {
           _currentUser = currentUser;
           _isLoading = false;
         });
-        print('🔍 ResidentProfileTab - Fallback to AuthApiService: $currentUser');
-      }
-      
-      // Load profile photo from verification request
-      if (_currentUser != null) {
-        _profilePhotoUrl = await _authApiService.getUserProfilePhoto();
         
-        print('🔍 ResidentProfileTab - Profile photo URL: $_profilePhotoUrl');
-        print('🔍 ResidentProfileTab - isVerifiedResident: ${_authApiService.isVerifiedResident()}');
-        print('🔍 ResidentProfileTab - isVerifiedNonResident: ${_authApiService.isVerifiedNonResident()}');
+        // Load profile photo using same method as Account Settings (from SharedPreferences cache)
+        if (_currentUser != null) {
+          _profilePhotoUrl = await _authApiService.getUserProfilePhoto();
+          print('🔍 ResidentProfileTab - Profile photo URL from AuthApiService (fallback): $_profilePhotoUrl');
+        }
+        
+        print('🔍 ResidentProfileTab - Fallback to AuthApiService: $currentUser');
       }
     } catch (e) {
       print('❌ ResidentProfileTab - Error loading user data: $e');

@@ -1,7 +1,10 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../config/app_config.dart';
+import 'auto_refresh_service.dart';
 
 class DataService {
   // Get current user data from SharedPreferences
@@ -57,7 +60,17 @@ class DataService {
       
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        return {'success': true, 'data': data};
+        print('🔍 DEBUG: DataService.fetchUserProfile response: $data');
+        
+        if (data['success'] == true && data.containsKey('user')) {
+          final userData = data['user'];
+          print('🔍 DEBUG: Extracted user data: $userData');
+          print('🔍 DEBUG: User data fields: ${userData.keys.toList()}');
+          print('🔍 DEBUG: Profile photo URL: ${userData['profile_photo_url']}');
+          return {'success': true, 'data': userData};
+        } else {
+          return {'success': false, 'error': 'Invalid response format'};
+        }
       } else {
         return {'success': false, 'error': 'Failed to fetch profile'};
       }
@@ -383,6 +396,13 @@ class DataService {
       
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
+        
+        // Trigger auto-refresh if verification status was updated successfully and refresh_data is provided
+        if (data['success'] == true && data.containsKey('refresh_data')) {
+          print('🔄 Triggering auto-refresh for verification status update');
+          AutoRefreshService().triggerAutoRefresh(data['refresh_data']);
+        }
+        
         return {
           'success': true,
           'message': data['message'] ?? 'Verification status updated successfully',
@@ -451,6 +471,12 @@ class DataService {
 
       // Add email to profile data for server identification
       profileData['email'] = userData['email'];
+      
+      print('🔍 DEBUG: Frontend profile update data:');
+      print('🔍 DEBUG: Full profileData: $profileData');
+      print('🔍 DEBUG: Email: ${profileData['email']}');
+      print('🔍 DEBUG: Has profile_photo_url: ${profileData.containsKey('profile_photo_url')}');
+      print('🔍 DEBUG: Profile photo URL length: ${profileData['profile_photo_url']?.length ?? 0}');
 
       final response = await http.put(
         Uri.parse('${AppConfig.baseUrl}/api/users/profile'),
@@ -460,6 +486,13 @@ class DataService {
       
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
+        
+        // Trigger auto-refresh if profile was updated successfully and refresh_data is provided
+        if (data['success'] == true && data.containsKey('refresh_data')) {
+          print('🔄 Triggering auto-refresh for profile update');
+          AutoRefreshService().triggerAutoRefresh(data['refresh_data']);
+        }
+        
         return {
           'success': true,
           'message': data['message'] ?? 'Profile updated successfully',

@@ -823,13 +823,37 @@ Barangay Management"""
         if is_official_booking and rejected_resident_bookings:
             response_message += f' Auto-rejected {len(rejected_resident_bookings)} resident booking(s).'
         
+        # Add auto-refresh metadata for frontend
+        refresh_data = {
+            'trigger': 'booking_created',
+            'booking_id': booking_id,
+            'facility_id': data['facility_id'],
+            'booking_date': data['date'],
+            'timeslot': data['timeslot'],
+            'user_email': data['user_email'],
+            'status': booking_status,
+            'timestamp': datetime.now().isoformat(),
+            'requires_refresh': [
+                'calendar_view',      # Refresh facility calendar
+                'bookings_list',      # Refresh user bookings
+                'time_slots',         # Refresh available time slots
+                'facility_availability' # Refresh facility status
+            ]
+        }
+        
+        # If official booking rejected resident bookings, add those to refresh data
+        if rejected_resident_bookings:
+            refresh_data['rejected_bookings'] = rejected_resident_bookings
+            refresh_data['requires_refresh'].append('resident_notifications')
+        
         return jsonify({
             'success': True, 
             'message': response_message,
             'booking_id': booking_id,
             'status': booking_status,
             'rejected_resident_bookings': rejected_resident_bookings,
-            'note': 'Multiple users may book the same time slot. First approved booking wins!' if not is_official_booking else 'Official bookings take priority over resident bookings.'
+            'note': 'Multiple users may book the same time slot. First approved booking wins!' if not is_official_booking else 'Official bookings take priority over resident bookings.',
+            'refresh_data': refresh_data  # Auto-refresh instructions
         })
         
     except Exception as e:
@@ -1586,6 +1610,13 @@ def get_user_by_id(user_id):
 def update_user_profile():
     try:
         data = request.get_json()
+        print(f"🔍 DEBUG: Profile update request data: {data}")
+        
+        if not data:
+            return jsonify({'success': False, 'message': 'No data provided'}), 400
+        
+        if 'email' not in data:
+            return jsonify({'success': False, 'message': 'Email is required'}), 400
         
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -1619,23 +1650,64 @@ def update_user_profile():
             print(f"✅ Updated profile for user: {data['email']}")
             print(f"🔍 Updated fields: {', '.join([field.split(' = ')[0] for field in update_fields[:-1]])}")
         else:
-            print(f"🔍 No fields to update for user: {data['email']}")
+            print(f"🔍 No basic fields to update for user: {data['email']}")
         
         # Update profile photo if provided
         if 'profile_photo_url' in data and data['profile_photo_url']:
+            print(f"🔍 Updating profile photo for user: {data['email']}")
             cursor.execute('''
                 UPDATE users 
                 SET profile_photo_url = ?
                 WHERE email = ?
             ''', (data['profile_photo_url'], data['email']))
             print(f"✅ Updated profile photo for user: {data['email']}")
+        else:
+            print(f"🔍 No profile photo provided for user: {data['email']}")
         
         conn.commit()
         conn.close()
         
-        return jsonify({'success': True, 'message': 'Profile updated successfully'})
+        # Add auto-refresh metadata for frontend
+        refresh_data = {
+            'trigger': 'profile_updated',
+            'user_email': data['email'],
+            'timestamp': datetime.now().isoformat(),
+            'updated_fields': [],  # Track which fields were updated
+            'requires_refresh': [
+                'user_profile',            # Refresh user profile data
+                'profile_photo',           # Refresh profile photo display
+                'account_settings',        # Refresh account settings
+                'resident_dashboard',      # Refresh resident dashboard
+                'official_profile'         # Refresh official profile
+            ]
+        }
+        
+        # Track which fields were updated for targeted refresh
+        if 'full_name' in data and data['full_name'] is not None:
+            refresh_data['updated_fields'].append('full_name')
+        if 'contact_number' in data and data['contact_number'] is not None:
+            refresh_data['updated_fields'].append('contact_number')
+        if 'address' in data and data['address'] is not None:
+            refresh_data['updated_fields'].append('address')
+        if 'profile_photo_url' in data and data['profile_photo_url']:
+            refresh_data['updated_fields'].append('profile_photo_url')
+            refresh_data['requires_refresh'].append('profile_photo_display')
+        
+        print(f"✅ Updated profile for user: {data['email']}")
+        print(f"🔍 Updated fields: {', '.join(refresh_data['updated_fields'])}")
+        
+        return jsonify({
+            'success': True, 
+            'message': 'Profile updated successfully',
+            'refresh_data': refresh_data  # Auto-refresh instructions
+        })
+    except KeyError as e:
+        print(f"❌ KeyError in profile update: {e}")
+        return jsonify({'success': False, 'message': f'Missing required field: {str(e)}'}), 400
     except Exception as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
+        print(f"❌ Exception in profile update: {e}")
+        print(f"❌ Exception type: {type(e).__name__}")
+        return jsonify({'success': False, 'message': f'Error updating profile: {str(e)}'}), 500
 
 @app.route('/api/users/profile/<email>', methods=['GET'])
 def get_user_profile(email):
@@ -2114,7 +2186,34 @@ def update_verification_request(request_id):
         conn.close()
         
         print(f"✅ Verification request {request_id} updated successfully")
-        return jsonify({'success': True, 'message': 'Verification request updated successfully'})
+        
+        # Add auto-refresh metadata for frontend
+        refresh_data = {
+            'trigger': 'verification_status_updated',
+            'request_id': request_id,
+            'status': data.get('status'),
+            'timestamp': datetime.now().isoformat(),
+            'requires_refresh': [
+                'verification_requests',    # Refresh verification requests list
+                'user_profile',            # Refresh user profile data
+                'verification_status',      # Refresh verification status
+                'account_settings'         # Refresh account settings
+            ]
+        }
+        
+        # If approved, add additional refresh requirements
+        if data.get('status') == 'approved':
+            refresh_data['requires_refresh'].addAll([
+                'user_discount_rate',      # Refresh discount rates
+                'profile_photo',           # Refresh profile photos
+                'resident_dashboard'       # Refresh dashboard
+            ])
+        
+        return jsonify({
+            'success': True, 
+            'message': 'Verification request updated successfully',
+            'refresh_data': refresh_data  # Auto-refresh instructions
+        })
         
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})

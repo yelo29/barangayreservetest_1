@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:intl/intl.dart';
 import '../../../services/data_service.dart';
 import '../../../services/auth_api_service.dart';
+import '../../../services/auto_refresh_service.dart';
 
 class OfficialAuthenticationTab extends StatefulWidget {
   final Map<String, dynamic>? userData;
@@ -15,7 +16,7 @@ class OfficialAuthenticationTab extends StatefulWidget {
   State<OfficialAuthenticationTab> createState() => _OfficialAuthenticationTabState();
 }
 
-class _OfficialAuthenticationTabState extends State<OfficialAuthenticationTab> {
+class _OfficialAuthenticationTabState extends State<OfficialAuthenticationTab> with AutoRefreshMixin {
   List<Map<String, dynamic>> _verificationRequests = [];
   List<Map<String, dynamic>> _filteredRequests = [];
   bool _isLoading = true;
@@ -24,6 +25,17 @@ class _OfficialAuthenticationTabState extends State<OfficialAuthenticationTab> {
   @override
   void initState() {
     super.initState();
+    
+    // Initialize auto-refresh for authentication requests tab
+    initAutoRefresh('verification_requests');
+    
+    // Register refresh callback for verification requests updates
+    registerRefreshCallback(() {
+      if (mounted) {
+        _loadVerificationRequests();
+      }
+    });
+    
     _loadVerificationRequests();
   }
 
