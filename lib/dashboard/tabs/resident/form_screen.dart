@@ -9,6 +9,7 @@ import '../../../services/auto_refresh_service.dart';
 import '../../../services/base64_image_service.dart';
 import '../../../models/facility_model.dart';
 import '../../../config/app_config.dart';
+import '../../../widgets/booking_conflict_detector.dart';
 
 class FormScreen extends StatefulWidget {
   final String facilityName;
@@ -636,13 +637,28 @@ class _FormScreenState extends State<FormScreen> with AutoRefreshMixin {
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+      body: BookingConflictDetector(
+        facilityId: int.parse(widget.facilityId),
+        date: widget.selectedDate,
+        timeslot: 'ALL DAY', // Since this is an all-day booking form
+        userEmail: _getCurrentUserEmail(),
+        onConflictDetected: () {
+          // Refresh time slots when conflict is detected
+          _refreshTimeSlots();
+        },
+        onConflictResolved: () {
+          // Clear any conflict messages when resolved
+          setState(() {
+            _errorMessage = null;
+          });
+        },
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16.0),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
               // Facility and Date Info
               Container(
                 padding: const EdgeInsets.all(16),
@@ -1158,6 +1174,33 @@ class _FormScreenState extends State<FormScreen> with AutoRefreshMixin {
               ),
             ],
           ),
+        ),
+      ),
+    ),
+  );
+
+  // Get current user email
+  String _getCurrentUserEmail() {
+    final currentUser = AuthApiService.instance.getCurrentUser();
+    if (currentUser != null) {
+      return currentUser['email'] ?? '';
+    }
+    return '';
+  }
+
+  // Refresh time slots when conflict is detected
+  void _refreshTimeSlots() {
+    // This would typically refresh available time slots
+    // For now, we'll just show a message to the user
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Please refresh the page to see updated availability'),
+        backgroundColor: Colors.orange,
+        action: SnackBarAction(
+          label: 'Refresh',
+          onPressed: () {
+            Navigator.of(context).pop();
+          },
         ),
       ),
     );

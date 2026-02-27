@@ -1,5 +1,7 @@
 import 'dart:async';
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+import 'auth_api_service.dart';
 import '../services/api_service.dart';
 
 class AutoRefreshService {
@@ -29,7 +31,7 @@ class AutoRefreshService {
   }
   
   /// Trigger auto-refresh based on API response refresh_data
-  void triggerAutoRefresh(Map<String, dynamic> refreshData) {
+  Future<void> triggerAutoRefresh(Map<String, dynamic> refreshData) async {
     print('🔄 Auto-refresh triggered: ${refreshData['trigger']}');
     
     final String trigger = refreshData['trigger'] ?? 'unknown';
@@ -55,16 +57,18 @@ class AutoRefreshService {
     }
     
     // Handle special cases
-    _handleSpecialRefreshCases(refreshData);
+    await _handleSpecialRefreshCases(refreshData);
   }
   
-  /// Handle special refresh cases with cross-implications
-  void _handleSpecialRefreshCases(Map<String, dynamic> refreshData) {
+  /// Handle refresh based on trigger type
+  Future<void> _handleSpecialRefreshCases(Map<String, dynamic> refreshData) async {
     final String trigger = refreshData['trigger'] ?? '';
+    
+    print('🔄 Auto-refresh triggered: $trigger');
     
     switch (trigger) {
       case 'booking_created':
-        _handleBookingCreatedRefresh(refreshData);
+        await _handleBookingCreatedRefresh(refreshData);
         break;
       case 'booking_updated':
         _handleBookingUpdatedRefresh(refreshData);
@@ -82,7 +86,7 @@ class AutoRefreshService {
   }
   
   /// Handle booking creation refresh with cross-implications
-  void _handleBookingCreatedRefresh(Map<String, dynamic> refreshData) {
+  Future<void> _handleBookingCreatedRefresh(Map<String, dynamic> refreshData) async {
     final String facilityId = refreshData['facility_id']?.toString() ?? '';
     final String bookingDate = refreshData['booking_date'] ?? '';
     final String user_email = refreshData['user_email'] ?? '';
@@ -91,6 +95,12 @@ class AutoRefreshService {
     print('  - Facility ID: $facilityId');
     print('  - Booking Date: $bookingDate');
     print('  - User Email: $user_email');
+    
+    // Check if this is a conflict notification for current user
+    if (refreshData.containsKey('conflict_notification')) {
+      final conflictNotification = refreshData['conflict_notification'];
+      await _handleConflictNotification(conflictNotification);
+    }
     
     // If there are rejected bookings, trigger additional refreshes
     if (refreshData.containsKey('rejected_bookings')) {
@@ -101,12 +111,68 @@ class AutoRefreshService {
         final String residentEmail = rejectedBooking['resident_email'] ?? '';
         if (residentEmail.isNotEmpty) {
           // Trigger refresh for affected residents
-          _refreshCallbacks['user_notifications']?.call();
+          _refreshCallbacks['resident_notifications']?.call();
         }
       }
     }
+    
+    // Trigger general booking-related callbacks
+    _refreshCallbacks['booking_created']?.call();
+    _refreshCallbacks['calendar_view']?.call();
+    _refreshCallbacks['bookings_list']?.call();
+    _refreshCallbacks['time_slots']?.call();
+    
+    // Trigger specific refresh targets
+    final requiresRefresh = refreshData['requires_refresh'] as List<dynamic>? ?? [];
+    for (final target in requiresRefresh) {
+      _refreshCallbacks[target]?.call();
+    }
   }
-  
+
+  // Handle conflict notifications
+  Future<void> _handleConflictNotification(Map<String, dynamic> conflictNotification) async {
+    print('🔄 AutoRefresh: Handling conflict notification');
+    
+    // Get current user email to check if this notification applies to them
+    final currentUserEmail = await _getCurrentUserEmail();
+    
+    if (currentUserEmail != null && 
+        conflictNotification['exclude_user'] != currentUserEmail) {
+      
+      // This is a conflict for another user, show notification
+      _showConflictDialog(conflictNotification);
+    }
+  }
+
+  // Get current user email (integrated with AuthApiService)
+  Future<String?> _getCurrentUserEmail() async {
+    try {
+      final currentUser = await AuthApiService.instance.getCurrentUser();
+      if (currentUser != null) {
+        return currentUser['email'] as String?;
+      }
+    } catch (e) {
+      print('❌ Error getting current user email: $e');
+    }
+    return null;
+  }
+
+  // Show conflict dialog
+  void _showConflictDialog(Map<String, dynamic> conflictNotification) {
+    print('🔄 AutoRefresh: Showing conflict dialog');
+    
+    // This will be handled by the UI layer
+    // You can use a stream controller or callback system
+    _conflictController.add(conflictNotification);
+  }
+
+  // Stream controller for conflict notifications
+  final StreamController<Map<String, dynamic>> _conflictController = 
+      StreamController<Map<String, dynamic>>.broadcast();
+
+  // Stream for conflict notifications
+  Stream<Map<String, dynamic>> get conflictStream => _conflictController.stream;
+
   /// Handle booking update refresh
   void _handleBookingUpdatedRefresh(Map<String, dynamic> refreshData) {
     print('🔄 Handling booking update refresh');

@@ -16,6 +16,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from config import Config
+from email_service import email_service
 
 app = Flask(__name__)
 # Dynamic CORS configuration for DuckDNS
@@ -589,9 +590,67 @@ def update_booking_status(booking_id):
             ''', (new_status, rejection_type, booking_id))
             print(f"🔍 DEBUG: Updated booking {booking_id} status and type")
         
+        # 📧 Send email notifications for status changes
+        try:
+            # Get user and booking details for email
+            cursor.execute('''
+                SELECT u.email, u.full_name, f.name as facility_name, b.booking_date, b.start_time, b.booking_reference
+                FROM bookings b
+                JOIN users u ON b.user_id = u.id
+                JOIN facilities f ON b.facility_id = f.id
+                WHERE b.id = ?
+            ''', (booking_id,))
+            
+            booking_details = cursor.fetchone()
+            if booking_details:
+                user_email, user_name, facility_name, booking_date, start_time, booking_reference = booking_details
+                
+                booking_info = {
+                    'facility_name': facility_name,
+                    'booking_date': booking_date,
+                    'timeslot': start_time,  # Use start_time as timeslot
+                    'booking_reference': booking_reference
+                }
+                
+                if new_status == 'rejected':
+                    # Send rejection email
+                    email_service.send_booking_rejection_email(
+                        recipient_email=user_email,
+                        recipient_name=user_name,
+                        booking_details=booking_info,
+                        rejection_reason=rejection_reason or "Booking rejected by administrator",
+                        rejection_type=rejection_type
+                    )
+                    print(f"📧 Rejection email sent to {user_email}")
+                    
+                elif new_status == 'approved':
+                    # Send approval email
+                    email_service.send_booking_approval_email(
+                        recipient_email=user_email,
+                        recipient_name=user_name,
+                        booking_details=booking_info
+                    )
+                    print(f"📧 Approval email sent to {user_email}")
+                    
+        except Exception as email_error:
+            print(f"❌ Error sending email notification: {email_error}")
+            # Don't fail the booking update if email fails
+        
         # If approving, automatically reject other pending bookings for the same time slot
         if new_status == 'approved' and current_status == 'pending':
             print(f"🏆 Approving booking {booking_id} and rejecting competitors for {facility_id} {date} {timeslot}")
+            
+            # Get details of competing bookings for email notifications
+            cursor.execute('''
+                SELECT b.id, u.email, u.full_name, f.name as facility_name, b.booking_date, b.start_time, b.booking_reference
+                FROM bookings b
+                JOIN users u ON b.user_id = u.id
+                JOIN facilities f ON b.facility_id = f.id
+                WHERE b.facility_id = ? AND b.booking_date = ? AND b.start_time = ? 
+                AND b.user_id != ? AND b.status = 'pending'
+            ''', (facility_id, date, timeslot, user_id))
+            
+            competing_bookings = cursor.fetchall()
             
             cursor.execute('''
                 UPDATE bookings 
@@ -602,6 +661,31 @@ def update_booking_status(booking_id):
             
             rejected_count = cursor.rowcount
             print(f"🚫 Auto-rejected {rejected_count} competing bookings")
+            
+            # 📧 Send rejection emails to competing bookings
+            for competing_booking in competing_bookings:
+                try:
+                    comp_booking_id, comp_email, comp_name, comp_facility, comp_date, comp_start_time, comp_reference = competing_booking
+                    
+                    comp_booking_info = {
+                        'facility_name': comp_facility,
+                        'booking_date': comp_date,
+                        'timeslot': comp_start_time,  # Use start_time as timeslot
+                        'booking_reference': comp_reference
+                    }
+                    
+                    email_service.send_booking_rejection_email(
+                        recipient_email=comp_email,
+                        recipient_name=comp_name,
+                        booking_details=comp_booking_info,
+                        rejection_reason="Your booking was automatically rejected because another booking was approved for the same time slot.",
+                        rejection_type="auto_rejection"
+                    )
+                    print(f"📧 Auto-rejection email sent to {comp_email}")
+                    
+                except Exception as email_error:
+                    print(f"❌ Error sending auto-rejection email: {email_error}")
+                    # Don't fail the booking update if email fails
         
         conn.commit()
         conn.close()
@@ -610,6 +694,73 @@ def update_booking_status(booking_id):
         
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/bookings/check-conflict', methods=['POST'])
+def check_booking_conflict():
+    """Check if there's a booking conflict for the given facility, date, and time"""
+    try:
+        data = request.get_json()
+        print(f"🔍 DEBUG: Checking booking conflict for: {data}")
+        
+        # Validate required fields
+        required_fields = ['facility_id', 'date', 'timeslot', 'user_email']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({'success': False, 'message': f'Missing required field: {field}'}), 400
+        
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        # Get user_id from email
+        cursor.execute('SELECT id FROM users WHERE email = ?', (data['user_email'],))
+        user_result = cursor.fetchone()
+        
+        if not user_result:
+            return jsonify({'success': False, 'message': 'User not found'}), 404
+        
+        user_id = user_result[0]
+        
+        # Check for existing bookings at the same time (excluding user's own bookings)
+        cursor.execute('''
+            SELECT id, user_email, created_at, status
+            FROM bookings 
+            WHERE facility_id = ? 
+            AND date = ? 
+            AND timeslot = ?
+            AND user_email != ?
+            AND status IN ('pending', 'approved')
+            ORDER BY created_at DESC
+        ''', (data['facility_id'], data['date'], data['timeslot'], data['user_email']))
+        
+        existing_bookings = cursor.fetchall()
+        print(f"🔍 DEBUG: Found {len(existing_bookings)} existing bookings for this time slot")
+        
+        conn.close()
+        
+        if existing_bookings:
+            # Return conflict information
+            latest_booking = existing_bookings[0]
+            return jsonify({
+                'success': True,
+                'has_conflict': True,
+                'conflict_info': {
+                    'booking_id': latest_booking[0],
+                    'user_email': latest_booking[1],
+                    'created_at': latest_booking[2],
+                    'status': latest_booking[3],
+                    'message': 'We are very sorry but someone already booked that certain Time. Please pick a different time instead'
+                }
+            })
+        else:
+            return jsonify({
+                'success': True,
+                'has_conflict': False,
+                'message': 'Time slot is available'
+            })
+            
+    except Exception as e:
+        print(f"❌ Error checking booking conflict: {e}")
+        return jsonify({'success': False, 'message': f'Error checking conflict: {str(e)}'}), 500
 
 @app.route('/api/bookings', methods=['POST'])
 def create_booking():
@@ -836,9 +987,17 @@ Barangay Management"""
             'requires_refresh': [
                 'calendar_view',      # Refresh facility calendar
                 'bookings_list',      # Refresh user bookings
+                'booking_form',       # Refresh booking forms for this facility/date
                 'time_slots',         # Refresh available time slots
-                'facility_availability' # Refresh facility status
-            ]
+                'conflict_check'      # Trigger conflict checking for other users
+            ],
+            'conflict_notification': {
+                'facility_id': data['facility_id'],
+                'date': data['date'],
+                'timeslot': data['timeslot'],
+                'message': 'Time slot is no longer available',
+                'exclude_user': data['user_email']  # Don't notify the user who just booked
+            }
         }
         
         # If official booking rejected resident bookings, add those to refresh data
@@ -2181,6 +2340,44 @@ def update_verification_request(request_id):
                     WHERE id = (SELECT user_id FROM verification_requests WHERE id = ?)
                 ''', (profile_photo, request_id))
                 print(f"✅ Updated profile photo for user with verification request ID: {request_id}")
+            
+            # 📧 Send email notifications for verification status updates
+            try:
+                # Get user details for email
+                cursor.execute('''
+                    SELECT u.email, u.full_name
+                    FROM users u
+                    WHERE u.id = (SELECT user_id FROM verification_requests WHERE id = ?)
+                ''', (request_id,))
+                
+                user_details = cursor.fetchone()
+                if user_details:
+                    user_email, user_name = user_details
+                    
+                    if data.get('status') == 'approved':
+                        # Send approval email
+                        email_service.send_verification_approval_email(
+                            recipient_email=user_email,
+                            recipient_name=user_name,
+                            verification_type=verification_type,
+                            discount_rate=discount_rate
+                        )
+                        print(f"📧 Verification approval email sent to {user_email}")
+                        
+                    elif data.get('status') == 'rejected':
+                        # Send rejection email
+                        rejection_reason = data.get('rejectionReason', 'Verification request did not meet requirements')
+                        email_service.send_verification_rejection_email(
+                            recipient_email=user_email,
+                            recipient_name=user_name,
+                            verification_type=verification_type,
+                            rejection_reason=rejection_reason
+                        )
+                        print(f"📧 Verification rejection email sent to {user_email}")
+                        
+            except Exception as email_error:
+                print(f"❌ Error sending verification email notification: {email_error}")
+                # Don't fail the verification update if email fails
         
         conn.commit()
         conn.close()
