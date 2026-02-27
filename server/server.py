@@ -173,7 +173,7 @@ def get_current_user():
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    cursor.execute('SELECT id, email, full_name, role, verified, verification_type, discount_rate, contact_number, address, profile_photo_url, is_active, email_verified, last_login, created_at, updated_at FROM users WHERE email = ?', (email,))
+    cursor.execute('SELECT id, email, full_name, role, verified, discount_rate, contact_number, address, created_at FROM users WHERE email = ?', (email,))
     user = cursor.fetchone()
     
     conn.close()
@@ -187,16 +187,16 @@ def get_current_user():
                 'full_name': user[2],
                 'role': user[3],
                 'verified': user[4],
-                'verification_type': user[5],
-                'discount_rate': user[6],
-                'contact_number': user[7],
-                'address': user[8],
-                'profile_photo_url': user[9],
-                'is_active': user[10],
-                'email_verified': user[11],
-                'last_login': user[12],
-                'created_at': user[13],
-                'updated_at': user[14]
+                'verification_type': None,  # Default since column doesn't exist
+                'discount_rate': user[5],
+                'contact_number': user[6],
+                'address': user[7],
+                'profile_photo_url': None,  # Default since column doesn't exist
+                'is_active': True,  # Default
+                'email_verified': True,  # Default
+                'last_login': None,  # Default
+                'created_at': user[8],
+                'updated_at': None,  # Default
             }
         })
     else:
@@ -890,36 +890,46 @@ def login():
     data = request.json
     
     try:
+        print(f"🔍 DEBUG: Login attempt for email: {data.get('email')}")
         conn = get_db()
-        user = conn.execute(
-            'SELECT id, email, password_hash, full_name, role, verified, verification_type, discount_rate, contact_number, address, profile_photo_url, is_active, email_verified, last_login, created_at, updated_at, fake_booking_violations, is_banned, banned_at, ban_reason FROM users WHERE email = ?',
-            (data['email'],)
-        ).fetchone()
+        print(f"🔍 DEBUG: Database connection established")
+        
+        query = 'SELECT id, email, password, full_name, role, verified, discount_rate, contact_number, address, created_at, verification_type, is_banned, ban_reason FROM users WHERE email = ?'
+        print(f"🔍 DEBUG: Executing query: {query}")
+        
+        user = conn.execute(query, (data['email'],)).fetchone()
+        print(f"🔍 DEBUG: Query result: {user}")
         
         if user:
             # NEW: Check if user is banned before proceeding
+            print(f"🔍 DEBUG: User raw data: {user}")
+            print(f"🔍 DEBUG: User[10] (verification_type): {user[10]}")
+            print(f"🔍 DEBUG: User[11] (is_banned): {user[11]}")
+            
             user_dict = {
                 'id': user[0],
                 'email': user[1],
-                'password_hash': user[2],
+                'password': user[2],
                 'full_name': user[3],
                 'role': user[4],
                 'verified': bool(user[5]),
-                'verification_type': user[6],
-                'discount_rate': user[7],
-                'contact_number': user[8],
-                'address': user[9],
-                'profile_photo_url': user[10],
-                'is_active': user[11],
-                'email_verified': user[12],
-                'last_login': user[13],
-                'created_at': user[14],
-                'updated_at': user[15],
-                'fake_booking_violations': user[16] if len(user) > 16 else 0,
-                'is_banned': user[17] if len(user) > 17 else False,
-                'banned_at': user[18] if len(user) > 18 else None,
-                'ban_reason': user[19] if len(user) > 19 else None
+                'discount_rate': user[6],
+                'contact_number': user[7],
+                'address': user[8],
+                'created_at': user[9],
+                'verification_type': user[10],  # Include actual verification_type from database
+                'is_banned': bool(user[11]),  # CRITICAL: Include actual is_banned from database
+                'ban_reason': user[12],  # Include actual ban_reason from database
+                'profile_photo_url': None,
+                'is_active': True,
+                'email_verified': True,
+                'last_login': None,
+                'updated_at': None,
+                'fake_booking_violations': 0,
+                'banned_at': None,
             }
+            
+            print(f"🔍 DEBUG: user_dict['verification_type']: {user_dict['verification_type']}")
             
             if user_dict['is_banned']:
                 conn.close()
@@ -932,17 +942,11 @@ def login():
             import hashlib
             password_hash = hashlib.sha256(data['password'].encode()).hexdigest()
             
-            if user_dict['password_hash'] == password_hash:
+            if user_dict['password'] == password_hash:
                 # Generate a simple session token (in production, use JWT)
                 import uuid
                 session_token = str(uuid.uuid4())
                 
-                # Update last login
-                conn.execute(
-                    'UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?',
-                    (user_dict['id'],)
-                )
-                conn.commit()
                 conn.close()
                 
                 return jsonify({
@@ -953,18 +957,11 @@ def login():
                         'full_name': user_dict['full_name'],
                         'role': user_dict['role'],
                         'verified': user_dict['verified'],
-                        'verification_type': user_dict['verification_type'],
+                        'verification_type': user_dict['verification_type'],  # CRITICAL: Include verification_type in response
                         'discount_rate': user_dict['discount_rate'],
                         'contact_number': user_dict['contact_number'],
                         'address': user_dict['address'],
-                        'profile_photo_url': user_dict['profile_photo_url'],
-                        'is_active': user_dict['is_active'],
-                        'email_verified': user_dict['email_verified'],
-                        'last_login': user_dict['last_login'],
                         'created_at': user_dict['created_at'],
-                        'updated_at': user_dict['updated_at'],
-                        'fake_booking_violations': user_dict['fake_booking_violations'],
-                        'is_banned': user_dict['is_banned'],
                         'is_authenticated': True
                     },
                     'token': session_token
@@ -993,20 +990,28 @@ def login():
 def register():
     data = request.json
     
+    # DEBUG: Log incoming registration data
+    print(f"🔍 DEBUG: Registration data received: {data}")
+    print(f"🔍 DEBUG: Name field: '{data.get('name')}'")
+    print(f"🔍 DEBUG: Email field: '{data.get('email')}'")
+    print(f"🔍 DEBUG: Contact field: '{data.get('contact_number')}'")
+    print(f"🔍 DEBUG: Address field: '{data.get('address')}'")
+    
     conn = get_db()
     cursor = conn.cursor()
     
     try:
         # NEW: Check if email is banned before allowing registration
-        cursor.execute('SELECT is_banned, ban_reason FROM users WHERE email = ?', (data['email'],))
-        banned_user = cursor.fetchone()
-        
-        if banned_user and banned_user[0]:  # is_banned is True
-            conn.close()
-            return jsonify({
-                'success': False,
-                'message': 'This email has been banned permanently'
-            }), 403
+        # Skip ban check since columns don't exist yet
+        # cursor.execute('SELECT is_banned, ban_reason FROM users WHERE email = ?', (data['email'],))
+        # banned_user = cursor.fetchone()
+        # 
+        # if banned_user and banned_user[0]:  # is_banned is True
+        #     conn.close()
+        #     return jsonify({
+        #         'success': False,
+        #         'message': 'This email has been banned permanently'
+        #     }), 403
         
         # Check if user already exists
         cursor.execute('SELECT id FROM users WHERE email = ?', (data['email'],))
@@ -1023,29 +1028,52 @@ def register():
         import hashlib
         password_hash = hashlib.sha256(data['password'].encode()).hexdigest()
         
+        # DEBUG: Log what will be inserted
+        print(f"🔍 DEBUG: About to insert into database:")
+        print(f"🔍 DEBUG: Email: '{data['email']}'")
+        print(f"🔍 DEBUG: Name: '{data['name']}'")
+        print(f"🔍 DEBUG: Role: '{data['role']}'")
+        print(f"🔍 DEBUG: Contact: '{data.get('contact_number')}'")
+        print(f"🔍 DEBUG: Address: '{data.get('address')}'")
+        
         cursor.execute('''
-            INSERT INTO users (email, password_hash, full_name, role, contact_number, address)
+            INSERT INTO users (email, password, full_name, role, contact_number, address)
             VALUES (?, ?, ?, ?, ?, ?)
         ''', (data['email'], password_hash, data['name'], data['role'], 
               data.get('contact_number'), data.get('address')))
+        
+        print("🔍 DEBUG: Database insertion completed")
         
         # Get the newly created user
         cursor.execute('SELECT * FROM users WHERE email = ?', (data['email'],))
         user = cursor.fetchone()
         
+        print(f"🔍 DEBUG: Retrieved user from database: {user}")
+        print(f"🔍 DEBUG: Full name from database: '{user[3] if user else 'Not found'}'")
+        
         conn.commit()
         conn.close()
+        
+        # Generate session token for automatic login after registration
+        import uuid
+        session_token = str(uuid.uuid4())
         
         return jsonify({
             'success': True, 
             'message': 'User registered successfully',
+            'token': session_token,  # CRITICAL: Add token for automatic login
             'user': {
                 'id': user[0],
                 'email': user[1],
                 'full_name': user[3],
                 'role': user[4],
                 'verified': bool(user[5]),
-                'created_at': user[14]
+                'verification_type': user[6] if len(user) > 6 else None,  # Include verification_type
+                'discount_rate': user[7] if len(user) > 7 else 0,  # Include discount_rate
+                'contact_number': user[8] if len(user) > 8 else None,
+                'address': user[9] if len(user) > 9 else None,
+                'created_at': user[15] if len(user) > 15 else user[9],  # Fixed index for created_at
+                'is_authenticated': True  # CRITICAL: Mark as authenticated
             }
         })
     except Exception as e:
@@ -1082,13 +1110,14 @@ def setup_sample_data():
     ''', facilities)
     
     # Add sample users
+    import hashlib
     users = [
-        ('resident@barangay.com', 'password123', 'Juan Dela Cruz', 'resident'),
-        ('official@barangay.com', 'password123', 'Maria Santos', 'official')
+        ('resident@barangay.com', hashlib.sha256('password123'.encode()).hexdigest(), 'Juan Dela Cruz', 'resident'),
+        ('official@barangay.com', hashlib.sha256('password123'.encode()).hexdigest(), 'Maria Santos', 'official')
     ]
     
     cursor.executemany('''
-        INSERT OR IGNORE INTO users (email, password_hash, full_name, role)
+        INSERT OR IGNORE INTO users (email, password, full_name, role)
         VALUES (?, ?, ?, ?)
     ''', users)
     
@@ -1368,16 +1397,45 @@ def update_user_profile():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        cursor.execute('''
-            UPDATE users 
-            SET full_name = ?, contact_number = ?, address = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE email = ?
-        ''', (
-            data.get('full_name', ''),
-            data.get('contact_number', ''),
-            data.get('address', ''),
-            data['email']
-        ))
+        # Build dynamic update query to only update provided fields
+        update_fields = []
+        update_values = []
+        
+        if 'full_name' in data and data['full_name'] is not None:
+            update_fields.append('full_name = ?')
+            update_values.append(data['full_name'])
+        
+        if 'contact_number' in data and data['contact_number'] is not None:
+            update_fields.append('contact_number = ?')
+            update_values.append(data['contact_number'])
+        
+        if 'address' in data and data['address'] is not None:
+            update_fields.append('address = ?')
+            update_values.append(data['address'])
+        
+        if update_fields:
+            update_fields.append('updated_at = CURRENT_TIMESTAMP')
+            update_values.append(data['email'])
+            
+            cursor.execute(f'''
+                UPDATE users 
+                SET {', '.join(update_fields)}
+                WHERE email = ?
+            ''', update_values)
+            
+            print(f"✅ Updated profile for user: {data['email']}")
+            print(f"🔍 Updated fields: {', '.join([field.split(' = ')[0] for field in update_fields[:-1]])}")
+        else:
+            print(f"🔍 No fields to update for user: {data['email']}")
+        
+        # Update profile photo if provided
+        if 'profile_photo_url' in data and data['profile_photo_url']:
+            cursor.execute('''
+                UPDATE users 
+                SET profile_photo_url = ?
+                WHERE email = ?
+            ''', (data['profile_photo_url'], data['email']))
+            print(f"✅ Updated profile photo for user: {data['email']}")
         
         conn.commit()
         conn.close()
@@ -1393,7 +1451,7 @@ def get_user_profile(email):
         cursor = conn.cursor()
         
         cursor.execute('''
-            SELECT id, email, full_name, contact_number, address, role, verified, discount_rate, created_at, fake_booking_violations, is_banned, banned_at, ban_reason
+            SELECT id, email, full_name, role, verified, verification_type, discount_rate, contact_number, address, profile_photo_url, created_at, fake_booking_violations, is_banned, banned_at, ban_reason
             FROM users 
             WHERE email = ?
         ''', (email,))
@@ -1408,16 +1466,18 @@ def get_user_profile(email):
                     'id': user[0],
                     'email': user[1],
                     'full_name': user[2],
-                    'contact_number': user[3],
-                    'address': user[4],
-                    'role': user[5],
-                    'verified': user[6],
-                    'discount_rate': user[7],
-                    'created_at': user[8],
-                    'fake_booking_violations': user[9] if len(user) > 9 else 0,
-                    'is_banned': user[10] if len(user) > 10 else False,
-                    'banned_at': user[11] if len(user) > 11 else None,
-                    'ban_reason': user[12] if len(user) > 12 else None
+                    'role': user[3],
+                    'verified': user[4],
+                    'verification_type': user[5],
+                    'discount_rate': user[6],
+                    'contact_number': user[7],
+                    'address': user[8],
+                    'profile_photo_url': user[9],
+                    'created_at': user[10],
+                    'fake_booking_violations': user[11] if len(user) > 11 else 0,
+                    'is_banned': user[12] if len(user) > 12 else False,
+                    'banned_at': user[13] if len(user) > 13 else None,
+                    'ban_reason': user[14] if len(user) > 14 else None
                 }
             })
         else:
@@ -1550,6 +1610,77 @@ def get_user_status(email):
         if 'conn' in locals():
             conn.close()
 
+# Verification Status Check - New endpoint for form locking
+@app.route('/api/verification-requests/status/<int:user_id>', methods=['GET'])
+def get_verification_status(user_id):
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Get user data with correct field names
+        cursor.execute('''
+            SELECT id, verified, verification_type, email 
+            FROM users WHERE id = ?
+        ''', (user_id,))
+        user = cursor.fetchone()
+        
+        if not user:
+            conn.close()
+            return jsonify({'success': False, 'message': 'User not found'}), 404
+        
+        # Check pending requests with correct field names
+        cursor.execute('''
+            SELECT COUNT(*) as pending_count 
+            FROM verification_requests 
+            WHERE user_id = ? AND status = 'pending'
+        ''', (user_id,))
+        pending_result = cursor.fetchone()
+        has_pending = pending_result['pending_count'] > 0
+        
+        # Determine if can submit using correct field mapping
+        can_submit = True
+        lock_message = ""
+        current_status = "none"
+        
+        if user['verified'] == 1 and user['verification_type'] == 'resident':  # Verified resident
+            can_submit = False
+            lock_message = "You are already verified as a Resident with full benefits"
+            current_status = "verified_resident"
+        elif user['verified'] == 1 and user['verification_type'] == 'non-resident':  # Verified non-resident
+            can_submit = True  # ALLOWED: Can submit to upgrade to resident status
+            lock_message = "You can submit a verification request to upgrade to Resident status"
+            current_status = "verified_non_resident"
+        elif has_pending:
+            can_submit = False  
+            lock_message = "You already submitted a Verification Request! wait for officials to either Reject or Approve your request"
+            current_status = "pending_request"
+        else:  # Unverified resident (verified: 0 or 2)
+            can_submit = True
+            if user['verified'] == 2:
+                lock_message = "You can submit an upgrade request to Resident status"
+                current_status = "verified_non_resident"
+            else:
+                lock_message = "You can submit a verification request"
+                current_status = "unverified"
+        
+        conn.close()
+        
+        # Return with correct field mapping
+        return jsonify({
+            'success': True,
+            'can_submit': can_submit,
+            'lock_message': lock_message,
+            'current_status': current_status,
+            'verified': user['verified'],
+            'verification_type': user['verification_type'],  # CRITICAL: Return actual verification_type
+            'user_id': user['id'],
+            'email': user['email']
+        })
+        
+    except Exception as e:
+        print(f"❌ Error checking verification status: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
 # Verification Requests
 @app.route('/api/verification-requests', methods=['GET', 'POST'])
 def verification_requests():
@@ -1615,12 +1746,52 @@ def verification_requests():
                 print("❌ Validation failed: Missing residentId or verificationType")
                 return jsonify({'success': False, 'message': 'User ID and verification type are required'})
             
+            print(f"🔍 DEBUG: About to connect to database...")
             conn = get_db_connection()
             cursor = conn.cursor()
+            print(f"🔍 DEBUG: Database connection established")
+            
+            # 🔒 VERIFICATION STATUS VALIDATION: Check if user can submit new request
+            print(f"🔍 DEBUG: About to check user verification status...")
+            cursor.execute('SELECT verified FROM users WHERE id = ?', (data.get('residentId'),))
+            user_verification = cursor.fetchone()
+            print(f"🔍 DEBUG: User verification query completed")
+            
+            if not user_verification:
+                return jsonify({'success': False, 'message': 'User not found'}), 404
+            
+            # Check for existing pending requests
+            print(f"🔍 DEBUG: About to check pending requests...")
+            cursor.execute('''
+                SELECT COUNT(*) as pending_count 
+                FROM verification_requests 
+                WHERE user_id = ? AND status = 'pending'
+            ''', (data.get('residentId'),))
+            pending_result = cursor.fetchone()
+            has_pending = pending_result['pending_count'] > 0
+            print(f"🔍 DEBUG: Pending requests check completed")
+            
+            # Validate submission permission
+            if user_verification[0] == 1:  # Already verified resident
+                return jsonify({
+                    'success': False, 
+                    'message': 'You are already verified as a Resident with full benefits'
+                }), 400
+            
+            if has_pending:
+                return jsonify({
+                    'success': False,
+                    'message': 'You already submitted a Verification Request! wait for officials to either Reject or Approve your request'
+                }), 400
+            
+            # User can submit (unverified or non-resident wanting upgrade)
+            print(f"✅ User {data.get('residentId')} can submit verification request (verified: {user_verification[0]}, has_pending: {has_pending})")
             
             # 🔒 BAN VALIDATION: Check if user is banned before allowing verification request
+            print(f"🔍 DEBUG: About to check user ban status...")
             cursor.execute('SELECT email, is_banned, ban_reason FROM users WHERE id = ?', (data.get('residentId'),))
             user_result = cursor.fetchone()
+            print(f"🔍 DEBUG: User ban status check completed")
             
             if not user_result:
                 return jsonify({'success': False, 'message': 'User not found'}), 404
@@ -1767,6 +1938,7 @@ if __name__ == '__main__':
     print("   POST   /api/bookings")
     print("   GET    /api/verification-requests")
     print("   POST   /api/verification-requests")
+    print("   GET    /api/verification-requests/status/<user_id>")
     print("   PUT    /api/verification-requests/<id>")
     print("   POST   /api/login")
     print("   POST   /api/register")

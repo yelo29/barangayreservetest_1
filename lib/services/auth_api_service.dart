@@ -1,7 +1,9 @@
 import 'dart:convert';
+import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_service.dart';
+import 'data_service.dart';
 
 class AuthApiService {
   static AuthApiService? _instance;
@@ -81,7 +83,39 @@ class AuthApiService {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success'] == true) {
+          // Set current user
           _currentUser = data['user'];
+          
+          // CRITICAL: Clear verification status cache to prevent data isolation leaks
+          await clearVerificationStatus();
+          
+          // Save authentication token and persist session like in login
+          try {
+            final prefs = await SharedPreferences.getInstance();
+            
+            // Save auth token
+            if (data['token'] != null) {
+              await prefs.setString('auth_token', data['token']);
+              print('🔍 Saved auth token during registration');
+            }
+            
+            // Save user data
+            await prefs.setString('user_email', _currentUser!['email'] ?? '');
+            await prefs.setString('user_full_name', _currentUser!['full_name'] ?? '');
+            await prefs.setString('user_role', _currentUser!['role'] ?? '');
+            await prefs.setBool('user_verified', _currentUser!['verified'] ?? false);
+            await prefs.setString('user_verification_type', _currentUser!['verification_type']?.toString() ?? '');
+            await prefs.setDouble('user_discount_rate', (_currentUser!['discount_rate'] ?? 0).toDouble());
+            await prefs.setString('user_contact_number', _currentUser!['contact_number'] ?? '');
+            await prefs.setString('user_address', _currentUser!['address'] ?? '');
+            await prefs.setString('user_created_at', _currentUser!['created_at'] ?? '');
+            await prefs.setInt('user_id', _currentUser!['id'] ?? 0);
+            
+            print('🔍 Saved user session during registration');
+          } catch (e) {
+            print('❌ AuthApiService SharedPreferences error during registration: $e');
+          }
+          
           return data;
         } else {
           return {'success': false, 'message': data['message'] ?? 'Registration failed'};
@@ -171,6 +205,9 @@ class AuthApiService {
         
         _currentUser = user;
         
+        // CRITICAL: Clear verification status cache to prevent data isolation leaks
+        await clearVerificationStatus();
+        
         // Note: Ban checking removed - user will implement new approach
         
         // Save user data to SharedPreferences
@@ -183,6 +220,11 @@ class AuthApiService {
           await prefs.setString('user_role', user['role']?.toString() ?? '');
           await prefs.setBool('user_verified', user['verified'] ?? false);
           await prefs.setDouble('user_discount_rate', (user['discount_rate'] ?? 0.0).toDouble());
+          // Save profile photo to SharedPreferences
+          if (user['profile_photo_url'] != null && user['profile_photo_url'].toString().isNotEmpty) {
+            await prefs.setString('user_profile_photo_url', user['profile_photo_url'].toString());
+            print('🔍 Saved profile photo to SharedPreferences during login: ${user['profile_photo_url']}');
+          }
         } catch (e) {
           print('❌ AuthApiService SharedPreferences error: $e');
           print('❌ User data: $user');
@@ -266,7 +308,18 @@ class AuthApiService {
         user['is_active'] = user['is_active'] == 1 || user['is_active'] == true;
         
         _currentUser = user;
+        
+        // CRITICAL: Clear verification status cache to prevent data isolation leaks
+        await clearVerificationStatus();
+        
         print('✅ User restored successfully');
+        
+        // Load profile photo from SharedPreferences as fallback
+        final profilePhotoUrl = prefs.getString('user_profile_photo_url');
+        if (profilePhotoUrl != null && profilePhotoUrl.isNotEmpty) {
+          _currentUser!['profile_photo_url'] = profilePhotoUrl;
+          print('🔍 Loaded profile photo from SharedPreferences during restore: $profilePhotoUrl');
+        }
         
         // Note: Ban checking removed - user will implement new approach
         
@@ -536,6 +589,22 @@ class AuthApiService {
           await prefs.setDouble('user_discount_rate', (processedUser['discount_rate'] ?? 0.0).toDouble());
           await prefs.setBool('user_verified', processedUser['verified'] ?? false);
           
+          // Preserve existing profile photo if server has empty one
+          final existingProfilePhoto = prefs.getString('user_profile_photo_url');
+          final serverProfilePhoto = processedUser['profile_photo_url']?.toString() ?? '';
+          
+          if (serverProfilePhoto.isNotEmpty) {
+            // Server has profile photo, use it
+            await prefs.setString('user_profile_photo_url', serverProfilePhoto);
+            print('🔍 Updated profile photo from server: $serverProfilePhoto');
+          } else if (existingProfilePhoto != null && existingProfilePhoto.isNotEmpty) {
+            // Server has empty profile photo, preserve existing one
+            await prefs.setString('user_profile_photo_url', existingProfilePhoto);
+            print('🔍 Preserved existing profile photo: $existingProfilePhoto');
+            // Update current user with preserved photo
+            _currentUser!['profile_photo_url'] = existingProfilePhoto;
+          }
+          
           print('🔍 User data refreshed from server');
           return processedUser;
         }
@@ -612,6 +681,10 @@ class AuthApiService {
       if (userData['discount_rate'] != null) {
         await prefs.setDouble('user_discount_rate', userData['discount_rate'].toDouble());
       }
+      if (userData['profile_photo_url'] != null) {
+        await prefs.setString('user_profile_photo_url', userData['profile_photo_url']);
+        print('🔍 Saved profile photo to SharedPreferences: ${userData['profile_photo_url']}');
+      }
       
       // Update current user object
       if (_currentUser != null) {
@@ -638,7 +711,12 @@ class AuthApiService {
 
   String getUserProfilePhoto() {
     if (_currentUser != null) {
-      return _currentUser!['profile_photo_url'] ?? '';
+      // Prioritize SharedPreferences (most recent manual update)
+      final profilePhotoUrl = _currentUser!['profile_photo_url']?.toString() ?? '';
+      if (profilePhotoUrl.isNotEmpty) {
+        print('🔍 getUserProfilePhoto: Using current user photo: $profilePhotoUrl');
+        return profilePhotoUrl;
+      }
     }
     return '';
   }
@@ -677,5 +755,44 @@ class AuthApiService {
       return result;
     }
     return false;
+  }
+
+  // Verification Status Management - Data Isolation
+  static Map<String, dynamic>? _verificationStatus;
+
+  static Future<Map<String, dynamic>?> getVerificationStatus() async {
+    // Always fetch fresh verification status to prevent data isolation leaks
+    // Remove caching to ensure real-time data consistency
+    
+    final instance = AuthApiService.instance;
+    final currentUser = await instance.getCurrentUser();
+    if (currentUser != null) {
+      final status = await DataService.checkVerificationStatus(currentUser['id']);
+      if (status['success']) {
+        _verificationStatus = status;
+        return status;
+      }
+    }
+    return null;
+  }
+
+  static Future<void> clearVerificationStatus() async {
+    _verificationStatus = null;
+  }
+
+  static Future<void> updateVerificationStatus(Map<String, dynamic> status) async {
+    _verificationStatus = status;
+  }
+
+  static bool canSubmitVerification() {
+    return _verificationStatus?['can_submit'] ?? true;
+  }
+
+  static String verificationLockMessage() {
+    return _verificationStatus?['lock_message'] ?? '';
+  }
+
+  static String currentVerificationStatus() {
+    return _verificationStatus?['current_status'] ?? 'none';
   }
 }

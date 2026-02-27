@@ -509,4 +509,43 @@ class DataService {
       return {'success': false, 'error': e.toString()};
     }
   }
+
+  // Check verification status for form locking
+  static Future<Map<String, dynamic>> checkVerificationStatus(int userId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('${AppConfig.baseUrl}/api/verification-requests/status/$userId'),
+        headers: await getHeaders(),
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return {
+          'success': data['success'] ?? false,
+          'can_submit': data['can_submit'] ?? false,
+          'lock_message': data['lock_message'] ?? '',
+          'current_status': data['current_status'] ?? '',
+          'verified': data['verified'] ?? 0,
+          'verification_type': data['verification_type'],
+          'user_id': data['user_id'] ?? userId,
+          'email': data['email'] ?? '',
+        };
+      } else {
+        return {
+          'success': false, 
+          'error': 'HTTP ${response.statusCode}',
+          'can_submit': false,
+          'lock_message': 'Error checking verification status',
+        };
+      }
+    } catch (e) {
+      print('❌ Error checking verification status: $e');
+      return {
+        'success': false, 
+        'error': e.toString(),
+        'can_submit': false,
+        'lock_message': 'Error checking verification status',
+      };
+    }
+  }
 }

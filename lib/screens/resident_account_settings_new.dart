@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:convert';
+import 'dart:convert';
+import 'dart:io';
 import '../../../services/auth_api_service.dart';
 import '../../../services/data_service.dart';
 import '../../../utils/debug_logger.dart';
@@ -19,7 +23,9 @@ class _ResidentAccountSettingsScreenState extends State<ResidentAccountSettingsS
   final _addressController = TextEditingController();
   bool _isLoading = false;
   bool _isLoadingContact = false;
+  bool _isUploadingPhoto = false;
   List<Map<String, dynamic>> _officials = [];
+  Map<String, dynamic>? _currentUser;
 
   @override
   void initState() {
@@ -45,22 +51,26 @@ class _ResidentAccountSettingsScreenState extends State<ResidentAccountSettingsS
       
       if (currentUser != null) {
         setState(() {
+          _currentUser = currentUser;
           _nameController.text = currentUser['full_name'] ?? '';
           _contactController.text = currentUser['contact_number'] ?? '';
           _addressController.text = currentUser['address'] ?? '';
         });
         print('🔍 Account Settings - Loaded fresh data from server:');
+        print('  - Email: "${currentUser['email']}"');
         print('  - Full Name: "${_nameController.text}"');
         print('  - Contact: "${_contactController.text}"');
         print('  - Address: "${_addressController.text}"');
       } else if (widget.userData != null) {
         // Fallback to widget data
         setState(() {
+          _currentUser = widget.userData;
           _nameController.text = widget.userData!['full_name'] ?? '';
           _contactController.text = widget.userData!['contact_number'] ?? '';
           _addressController.text = widget.userData!['address'] ?? '';
         });
         print('🔍 Account Settings - Loaded fallback data:');
+        print('  - Email: "${widget.userData!['email']}"');
         print('  - Full Name: "${_nameController.text}"');
         print('  - Contact: "${_contactController.text}"');
         print('  - Address: "${_addressController.text}"');
@@ -70,6 +80,7 @@ class _ResidentAccountSettingsScreenState extends State<ResidentAccountSettingsS
       // Fallback to widget data
       if (widget.userData != null) {
         setState(() {
+          _currentUser = widget.userData;
           _nameController.text = widget.userData!['full_name'] ?? '';
           _contactController.text = widget.userData!['contact_number'] ?? '';
           _addressController.text = widget.userData!['address'] ?? '';
@@ -175,6 +186,71 @@ class _ResidentAccountSettingsScreenState extends State<ResidentAccountSettingsS
     }
   }
 
+  Future<void> _pickAndUploadProfilePhoto() async {
+    try {
+      setState(() {
+        _isUploadingPhoto = true;
+      });
+
+      // Pick image from gallery
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 800,
+        maxHeight: 800,
+        imageQuality: 85,
+      );
+
+      if (image != null) {
+        // Convert image to base64
+        final bytes = await image.readAsBytes();
+        final base64String = base64Encode(bytes);
+        
+        // Get current user data
+        final authApiService = AuthApiService.instance;
+        final currentUser = await authApiService.getCurrentUser();
+        
+        if (currentUser != null) {
+          // Update profile photo using server API
+          final result = await DataService.updateUserProfile({
+            'profile_photo_url': 'data:image/jpeg;base64,$base64String',
+          });
+          
+          if (result['success']) {
+            // Refresh user data to get updated profile photo
+            await authApiService.refreshCurrentUser();
+            
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Profile photo updated successfully!'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Failed to update profile photo: ${result['error']}'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      DebugLogger.ui('Error picking/uploading profile photo: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      setState(() {
+        _isUploadingPhoto = false;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -229,7 +305,7 @@ class _ResidentAccountSettingsScreenState extends State<ResidentAccountSettingsS
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              widget.userData?['email'] ?? 'resident@example.com',
+                              _currentUser?['email'] ?? widget.userData?['email'] ?? 'resident@example.com',
                               style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
@@ -237,7 +313,7 @@ class _ResidentAccountSettingsScreenState extends State<ResidentAccountSettingsS
                               ),
                             ),
                             const SizedBox(height: 4),
-                            if (widget.userData?['verified'] == true)
+                            if ((_currentUser?['verified'] == true) || (widget.userData?['verified'] == true))
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                 decoration: BoxDecoration(
@@ -302,6 +378,93 @@ class _ResidentAccountSettingsScreenState extends State<ResidentAccountSettingsS
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
                           color: Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      
+                      // Profile Photo Section
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[50],
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey[300]!),
+                        ),
+                        child: Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Container(
+                                  width: 80,
+                                  height: 80,
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue[50],
+                                    borderRadius: BorderRadius.circular(40),
+                                    border: Border.all(color: Colors.blue[200]!),
+                                  ),
+                                  child: Stack(
+                                    children: [
+                                      Center(
+                                        child: ClipOval(
+                                          child: _buildProfilePhoto(),
+                                        ),
+                                      ),
+                                      Positioned(
+                                        right: 0,
+                                        bottom: 0,
+                                        child: GestureDetector(
+                                          onTap: _pickAndUploadProfilePhoto,
+                                          child: Container(
+                                            width: 28,
+                                            height: 28,
+                                            decoration: BoxDecoration(
+                                              color: Colors.blue[600],
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: _isUploadingPhoto
+                                                ? const CircularProgressIndicator(
+                                                    color: Colors.white,
+                                                    strokeWidth: 2,
+                                                  )
+                                                : const Icon(
+                                                    Icons.camera_alt,
+                                                    color: Colors.white,
+                                                    size: 16,
+                                                  ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Profile Photo',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.black87,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        'Tap to change your profile photo',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey[600],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -616,6 +779,123 @@ class _ResidentAccountSettingsScreenState extends State<ResidentAccountSettingsS
         onTap: onTap,
       ),
     );
+  }
+
+  void _showCustomerService() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Customer Service'),
+        content: const SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Contact Information',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              SizedBox(height: 12),
+              Text('📞 Hotline: 0967-669-6767'),
+              Text('📧 Email: support@barangay.gov'),
+              Text('🕐 Hours: Monday - Friday, 8:00 AM - 5:00 PM'),
+              Text('📍 Office: Barangay Hall, 2nd Floor, Main Street'),
+              SizedBox(height: 20),
+              Text(
+                'Available Services',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              SizedBox(height: 8),
+              Text('• Account assistance and verification'),
+              Text('• Booking support and modifications'),
+              Text('• Payment processing and receipt upload'),
+              Text('• Technical issues and troubleshooting'),
+              Text('• Facility inquiries and availability'),
+              Text('• Emergency booking assistance'),
+              SizedBox(height: 20),
+              Text(
+                'Response Times',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              SizedBox(height: 8),
+              Text('• Phone calls: Immediate during business hours'),
+              Text('• Email responses: Within 24 hours'),
+              Text('• Urgent issues: Prioritized handling'),
+              Text('• Weekend emergencies: On-call staff available'),
+              SizedBox(height: 20),
+              Text(
+                'Additional Support Channels',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              SizedBox(height: 8),
+              Text('• In-person assistance at barangay hall'),
+              Text('• Community leader mediation'),
+              Text('• Online chat support (coming soon)'),
+              Text('• Mobile app notifications for updates'),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProfilePhoto() {
+    final authApiService = AuthApiService.instance;
+    final profilePhotoUrl = authApiService.getUserProfilePhoto();
+    
+    if (profilePhotoUrl.isNotEmpty) {
+      // Check if it's a base64 image or URL
+      if (profilePhotoUrl.startsWith('data:image')) {
+        // Base64 image
+        try {
+          final base64String = profilePhotoUrl.split(',')[1];
+          final decodedBytes = base64Decode(base64String);
+          return Image.memory(
+            decodedBytes,
+            width: 80,
+            height: 80,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) {
+              return Icon(Icons.person, size: 40, color: Colors.grey[600]);
+            },
+          );
+        } catch (e) {
+          return Icon(Icons.person, size: 40, color: Colors.grey[600]);
+        }
+      } else {
+        // URL image
+        return Image.network(
+          profilePhotoUrl,
+          width: 80,
+          height: 80,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            return Icon(Icons.person, size: 40, color: Colors.grey[600]);
+          },
+        );
+      }
+    } else {
+      // Default placeholder
+      return Icon(Icons.person, size: 40, color: Colors.grey[600]);
+    }
   }
 
   void _showPrivacyPolicy() {

@@ -27,8 +27,8 @@ class Config:
     # CORS settings - Allow all origins for DuckDNS flexibility
     CORS_ORIGINS = os.getenv('CORS_ORIGINS', '*')
     
-    # Database settings
-    DATABASE_PATH = os.getenv('DB_PATH', 'server/barangay.db')
+    # Database settings - Always use server folder
+    DATABASE_PATH = os.getenv('DB_PATH', os.path.join(os.path.dirname(__file__), 'barangay.db'))
     
     # DuckDNS settings (from environment)
     DUCKDNS_DOMAIN = os.getenv('DUCKDNS_DOMAIN', '')
@@ -57,7 +57,7 @@ ENV_VARS = {
     'SERVER_PORT': '8080', 
     'DEBUG': 'False',
     'CORS_ORIGINS': '*',
-    'DB_PATH': 'barangay.db',
+    'DB_PATH': 'server/barangay.db',  # Always use server folder
     'DUCKDNS_DOMAIN': 'your-domain.duckdns.org',
     'DUCKDNS_TOKEN': 'your-duckdns-token'
 }
