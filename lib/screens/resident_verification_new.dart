@@ -393,12 +393,12 @@ class _ResidentVerificationScreenState extends State<ResidentVerificationScreen>
 
               // Personal Information Section
               _buildSectionCard(
-                title: 'Personal Information',
+                title: 'Personal Information*',
                 child: Column(
                   children: [
                     TextFormField(
                       controller: _nameController,
-                      decoration: _buildInputDecoration('Full Name', Icons.person),
+                      decoration: _buildInputDecoration('Full Name*', Icons.person),
                       enabled: _canSubmit, // Lock based on verification status
                       validator: (value) {
                         if (value == null || value.isEmpty) {
@@ -410,7 +410,7 @@ class _ResidentVerificationScreenState extends State<ResidentVerificationScreen>
                     const SizedBox(height: 16),
                     TextFormField(
                       controller: _contactController,
-                      decoration: _buildInputDecoration('Contact Number', Icons.phone),
+                      decoration: _buildInputDecoration('Contact Number*', Icons.phone),
                       keyboardType: TextInputType.phone,
                       enabled: _canSubmit, // Lock based on verification status
                       validator: (value) {
@@ -423,7 +423,7 @@ class _ResidentVerificationScreenState extends State<ResidentVerificationScreen>
                     const SizedBox(height: 16),
                     TextFormField(
                       controller: _addressController,
-                      decoration: _buildInputDecoration('Complete Address', Icons.location_on),
+                      decoration: _buildInputDecoration('Complete Address*', Icons.location_on),
                       maxLines: 2,
                       enabled: _canSubmit, // Lock based on verification status
                       validator: (value) {
@@ -638,7 +638,7 @@ class _ResidentVerificationScreenState extends State<ResidentVerificationScreen>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          'Verification Type',
+          'Verification Type*',
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.bold,
@@ -713,12 +713,12 @@ class _ResidentVerificationScreenState extends State<ResidentVerificationScreen>
 
   Widget _buildPhotoUploadSection() {
     return _buildSectionCard(
-      title: 'Upload Documents',
+      title: 'Upload Documents*',
       child: Column(
         children: [
           // Profile Photo Upload
           _buildImageUploadCard(
-            title: 'Profile Photo',
+            title: 'Profile Photo*',
             subtitle: 'Upload a clear photo of yourself',
             image: _profileImage,
             onTap: _pickProfileImage,
@@ -731,7 +731,7 @@ class _ResidentVerificationScreenState extends State<ResidentVerificationScreen>
           const SizedBox(height: 16),
           // Valid ID Upload
           _buildImageUploadCard(
-            title: 'Valid ID',
+            title: 'Valid ID*',
             subtitle: 'Upload government-issued ID',
             image: _idImage,
             onTap: _pickIdImage,

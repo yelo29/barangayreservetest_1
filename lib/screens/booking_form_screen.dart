@@ -941,7 +941,7 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
 
               // Personal Information Section - Only for residents
               if (!_isOfficial) ...[
-                _buildSectionHeader('Personal Information', Icons.person),
+                _buildSectionHeader('Personal Information*', Icons.person),
                 const SizedBox(height: 16),
                 Card(
                   elevation: 2,
@@ -953,7 +953,7 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
                         TextFormField(
                           controller: _nameController,
                           decoration: _buildInputDecoration(
-                            'Full Name',
+                            'Full Name*',
                             'Enter your full name',
                             Icons.person,
                           ),
@@ -968,7 +968,7 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
                         TextFormField(
                           controller: _contactController,
                           decoration: _buildInputDecoration(
-                            'Contact Number',
+                            'Contact Number*',
                             'Enter your contact number',
                             Icons.phone,
                           ),
@@ -984,7 +984,7 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
                         TextFormField(
                           controller: _addressController,
                           decoration: _buildInputDecoration(
-                            'Address',
+                            'Address*',
                             'Enter your complete address',
                             Icons.location_on,
                           ),
@@ -1000,7 +1000,7 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
                         TextFormField(
                           controller: _purposeController,
                           decoration: _buildInputDecoration(
-                            'Purpose of Booking',
+                            'Purpose of Booking*',
                             'Describe the purpose of your booking',
                             Icons.description,
                           ),
@@ -1020,7 +1020,7 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
               ],
 
               // Time Slot Selection Section
-              _buildSectionHeader('Select Time Slot', Icons.access_time),
+              _buildSectionHeader('Select Time Slot*', Icons.access_time),
               const SizedBox(height: 16),
               Card(
                 elevation: 4,
