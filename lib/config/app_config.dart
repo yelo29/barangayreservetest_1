@@ -2,8 +2,8 @@
 /// Laptop as server with barangay.db database
 
 class AppConfig {
-  // Use actual computer IP and correct port from server log
-  static String _baseUrl = 'http://192.168.100.4:8000';
+  // Ngrok global server URL for Leo's account
+  static String _baseUrl = 'https://unstanding-unmenaced-pete.ngrok-free.dev';
   
   /// Get the current base URL
   static String get baseUrl => _baseUrl;
@@ -55,6 +55,14 @@ class AppConfig {
     return domain.contains('duckdns.org');
   }
   
+  /// Check if URL uses Ngrok
+  static bool isNgrokUrl(String url) {
+    final domain = extractDomain(url);
+    return domain.contains('ngrok.io') || 
+           domain.contains('ngrok.free.app') ||
+           domain.contains('ngrok-free.dev');
+  }
+  
   /// Convert HTTP to HTTPS for production
   static String toHttps(String url) {
     if (url.startsWith('http://')) {
@@ -68,6 +76,7 @@ class AppConfig {
     return {
       'baseUrl': _baseUrl,
       'isDuckDns': isDuckDnsUrl(_baseUrl),
+      'isNgrok': isNgrokUrl(_baseUrl),
       'domain': extractDomain(_baseUrl),
       'isValid': isValidUrl(_baseUrl),
     };
