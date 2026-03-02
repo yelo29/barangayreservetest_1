@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_service.dart';
 import 'data_service.dart';
+import 'persistent_auth_service.dart';
 
 class AuthApiService {
   static AuthApiService? _instance;
@@ -232,6 +233,10 @@ class AuthApiService {
         }
         
         print('✅ Login successful');
+        
+        // Save login state using PersistentAuthService
+        await PersistentAuthService.saveLoginState(user, result['token'] ?? '');
+        
         return {'success': true, 'user': user, 'token': result['token']};
       } else {
         print('❌ Login failed: ${result['message']}');
@@ -483,14 +488,15 @@ class AuthApiService {
     try {
       print('🔍 Signing out user...');
       
-      final result = await ApiService.logout();
+      // Clear persistent login state
+      await PersistentAuthService.clearLoginState();
       
       // Clear local data
       _currentUser = null;
       _isInitialized = false;
       
       print('✅ User signed out successfully');
-      return result;
+      return {'success': true};
     } catch (e) {
       print('❌ Sign out exception: $e');
       // Still clear local data even if network fails
