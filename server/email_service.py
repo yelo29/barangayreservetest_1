@@ -367,7 +367,7 @@ class EmailService:
             <div class="content">
                 <p>Dear <strong>{recipient_name}</strong>,</p>
                 
-                <p>Congratulations! Your verification request has been <strong>approved</strong>.</p>
+                <p>Congratulations! Your verification request has been <strong>approved</strong>, Please refresh the profile page.</p>
                 
                 <div class="verification-details">
                     <h3>🎉 Verification Details</h3>
@@ -478,7 +478,7 @@ class EmailService:
             <div class="content">
                 <p>Dear <strong>{recipient_name}</strong>,</p>
                 
-                <p>We regret to inform you that your {verification_display.lower()} verification request has been <strong>rejected</strong>.</p>
+                <p>We regret to inform you that your {verification_display.lower()} verification request has been <strong>rejected</strong>, Please Refresh your profile page so you can submit a verification request again, Make sure the requirements you give are valid.</p>
                 
                 <div class="verification-details">
                     <h3>📋 Verification Details</h3>
