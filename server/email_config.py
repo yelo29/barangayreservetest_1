@@ -13,5 +13,5 @@ SENDER_EMAIL = "leo052904@gmail.com"
 APP_PASSWORD = "tqlf yzje rxkc lnkn"
 
 # Email Settings
-EMAIL_ENABLED = True  # Set to False to disable email notifications
+EMAIL_ENABLED = False  # Set to False to disable email notifications
 DEBUG_EMAIL = False    # Set to True to print email content instead of sending

@@ -5,9 +5,9 @@ echo ========================================
 echo.
 
 echo Configuration Status:
-echo    Android App: https://barangay-reserve.trycloudflare.com
+echo    Android App: https://barangayreserve.dpdns.org
 echo    Server: Python on port 8000
-echo    Tunnel: Cloudflare (free, no limits)
+echo    Tunnel: Cloudflare Named Tunnel (permanent!)
 echo.
 
 echo Starting Services...
@@ -24,11 +24,11 @@ timeout /t 3 /nobreak >nul
 REM Start Cloudflare Tunnel
 echo Starting Cloudflare tunnel...
 cd /d "C:\tools\cloudflare"
-start "Cloudflare Tunnel" cmd /k .\cloudflared.exe tunnel --url http://localhost:8000
+start "Cloudflare Tunnel" cmd /k .\cloudflared.exe tunnel run barangayreserve-dpdns
 
 echo.
 echo Both services started!
-echo Android app ready: https://barangay-reserve.trycloudflare.com
-echo Tunnel URL will be shown in Cloudflare window
+echo Android app ready: https://barangayreserve.dpdns.org
+echo Tunnel URL: https://barangayreserve.dpdns.org
 echo.
 pause
