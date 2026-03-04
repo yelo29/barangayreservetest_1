@@ -524,6 +524,367 @@ class EmailService:
             </div>
             """
         return ""
+    
+    def send_booking_overlap_email(self, resident_email: str, resident_name: str, 
+                                 original_booking: dict, official_booking: dict) -> bool:
+        """Send email when official's booking overlaps with resident's booking"""
+        
+        subject = "⚠️ Booking Overlap Notification - Barangay Facility"
+        
+        html_body = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Booking Overlap</title>
+            <style>
+                body {{
+                    font-family: Arial, sans-serif;
+                    line-height: 1.6;
+                    color: #333;
+                    max-width: 600px;
+                    margin: 0 auto;
+                    padding: 20px;
+                }}
+                .header {{
+                    background: linear-gradient(135deg, #ffc107 0%, #ff6b6b 100%);
+                    color: white;
+                    padding: 30px;
+                    text-align: center;
+                    border-radius: 10px 10px 0 0;
+                }}
+                .content {{
+                    background: #f9f9f9;
+                    padding: 30px;
+                    border-radius: 0 0 10px 10px;
+                    box-shadow: 0 0 20px rgba(0,0,0,0.1);
+                }}
+                .booking-details {{
+                    background: white;
+                    padding: 20px;
+                    border-radius: 8px;
+                    margin: 20px 0;
+                    border-left: 4px solid #ffc107;
+                }}
+                .overlap-details {{
+                    background: #fff3cd;
+                    border: 1px solid #ffeaa7;
+                    padding: 15px;
+                    border-radius: 5px;
+                    margin: 20px 0;
+                }}
+                .footer {{
+                    text-align: center;
+                    margin-top: 30px;
+                    color: #666;
+                    font-size: 12px;
+                }}
+                .btn {{
+                    display: inline-block;
+                    padding: 12px 24px;
+                    background: #007bff;
+                    color: white;
+                    text-decoration: none;
+                    border-radius: 5px;
+                    margin: 10px 5px;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>🏛️ Barangay Management System</h1>
+                <h2>Booking Overlap Notification</h2>
+            </div>
+            
+            <div class="content">
+                <p>Dear <strong>{resident_name}</strong>,</p>
+                
+                <p>We sincerely apologize, but your existing booking has been overlapped by an official booking. Please see the details below:</p>
+                
+                <div class="booking-details">
+                    <h3>📅 Your Original Booking</h3>
+                    <p><strong>Facility:</strong> {original_booking.get('facility_name', 'N/A')}</p>
+                    <p><strong>Date:</strong> {original_booking.get('booking_date', 'N/A')}</p>
+                    <p><strong>Time:</strong> {original_booking.get('start_time', 'N/A')} - {original_booking.get('end_time', 'N/A')}</p>
+                    <p><strong>Reference:</strong> {original_booking.get('booking_reference', 'N/A')}</p>
+                </div>
+                
+                <div class="overlap-details">
+                    <h3>🏛️ Official Booking Details</h3>
+                    <p><strong>Official:</strong> {official_booking.get('official_name', 'Barangay Official')}</p>
+                    <p><strong>Facility:</strong> {official_booking.get('facility_name', 'N/A')}</p>
+                    <p><strong>Date:</strong> {official_booking.get('booking_date', 'N/A')}</p>
+                    <p><strong>Time:</strong> {official_booking.get('start_time', 'N/A')} - {official_booking.get('end_time', 'N/A')}</p>
+                    <p><strong>Purpose:</strong> {official_booking.get('purpose', 'Official Barangay Business')}</p>
+                </div>
+                
+                <p><strong>🙏 We sincerely apologize for this inconvenience.</strong> Official bookings take priority for barangay operations.</p>
+                
+                <h3>🔄 Next Steps:</h3>
+                <ul>
+                    <li>📞 You will be contacted to reschedule your booking</li>
+                    <li>💰 If applicable, refund will be processed automatically</li>
+                    <li>📋 Priority booking will be offered for your next request</li>
+                </ul>
+                
+                <p>If you have any questions or concerns, please contact the barangay office immediately.</p>
+            </div>
+            
+            <div class="footer">
+                <p>© 2025 Barangay Management System | This is an automated message, please do not reply to this email.</p>
+            </div>
+        </body>
+        </html>
+        """
+        
+        return self._send_email(resident_email, subject, html_body, is_html=True)
+    
+    def send_official_notification_email(self, request_type: str, resident_details: dict, 
+                                      request_details: dict) -> bool:
+        """Send email to officials when resident submits booking or authentication request"""
+        
+        subject = f"📋 New {request_type.title()} Request - Barangay Management System"
+        
+        request_display = "Booking" if request_type == "booking" else "Authentication"
+        
+        html_body = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>New Request Notification</title>
+            <style>
+                body {{
+                    font-family: Arial, sans-serif;
+                    line-height: 1.6;
+                    color: #333;
+                    max-width: 600px;
+                    margin: 0 auto;
+                    padding: 20px;
+                }}
+                .header {{
+                    background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+                    color: white;
+                    padding: 30px;
+                    text-align: center;
+                    border-radius: 10px 10px 0 0;
+                }}
+                .content {{
+                    background: #f9f9f9;
+                    padding: 30px;
+                    border-radius: 0 0 10px 10px;
+                    box-shadow: 0 0 20px rgba(0,0,0,0.1);
+                }}
+                .request-details {{
+                    background: white;
+                    padding: 20px;
+                    border-radius: 8px;
+                    margin: 20px 0;
+                    border-left: 4px solid #007bff;
+                }}
+                .resident-details {{
+                    background: #e3f2fd;
+                    border: 1px solid #bbdefb;
+                    padding: 15px;
+                    border-radius: 5px;
+                    margin: 20px 0;
+                }}
+                .action-required {{
+                    background: #fff3cd;
+                    border: 1px solid #ffeaa7;
+                    padding: 15px;
+                    border-radius: 5px;
+                    margin: 20px 0;
+                }}
+                .footer {{
+                    text-align: center;
+                    margin-top: 30px;
+                    color: #666;
+                    font-size: 12px;
+                }}
+                .btn {{
+                    display: inline-block;
+                    padding: 12px 24px;
+                    background: #28a745;
+                    color: white;
+                    text-decoration: none;
+                    border-radius: 5px;
+                    margin: 10px 5px;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>🏛️ Barangay Management System</h1>
+                <h2>New Request Notification</h2>
+            </div>
+            
+            <div class="content">
+                <p>Dear <strong>Barangay Officials</strong>,</p>
+                
+                <p>A new <strong>{request_display.lower()} request</strong> has been submitted and requires your review and action.</p>
+                
+                <div class="resident-details">
+                    <h3>👤 Resident Details</h3>
+                    <p><strong>Name:</strong> {resident_details.get('full_name', 'N/A')}</p>
+                    <p><strong>Email:</strong> {resident_details.get('email', 'N/A')}</p>
+                    <p><strong>Contact:</strong> {resident_details.get('contact_number', 'N/A')}</p>
+                    <p><strong>Verification Status:</strong> {resident_details.get('verification_status', 'N/A')}</p>
+                </div>
+                
+                <div class="request-details">
+                    <h3>📋 Request Details</h3>
+                    <p><strong>Request Type:</strong> {request_display}</p>
+                    <p><strong>Submitted:</strong> {request_details.get('submitted_at', 'N/A')}</p>
+                    <p><strong>Reference:</strong> {request_details.get('reference_number', 'N/A')}</p>
+                    {'<p><strong>Facility:</strong> ' + request_details.get('facility_name', 'N/A') + '</p>' if request_type == 'booking' else ''}
+                    {'<p><strong>Date:</strong> ' + request_details.get('booking_date', 'N/A') + '</p>' if request_type == 'booking' else ''}
+                    {'<p><strong>Time:</strong> ' + request_details.get('start_time', 'N/A') + ' - ' + request_details.get('end_time', 'N/A') + '</p>' if request_type == 'booking' else ''}
+                    {'<p><strong>Purpose:</strong> ' + request_details.get('purpose', 'N/A') + '</p>' if request_type == 'booking' else ''}
+                    {'<p><strong>Verification Type:</strong> ' + request_details.get('verification_type', 'N/A') + '</p>' if request_type == 'authentication' else ''}
+                </div>
+                
+                <div class="action-required">
+                    <h3>⚡ Action Required</h3>
+                    <p>Please review this request and take appropriate action:</p>
+                    <ul>
+                        <li>✅ <strong>Approve</strong> if all requirements are met</li>
+                        <li>❌ <strong>Reject</strong> with clear reason if requirements are not met</li>
+                        <li>📞 <strong>Contact resident</strong> if additional information is needed</li>
+                    </ul>
+                </div>
+                
+                <p><strong>📱 Please log into the Barangay Management System to process this request promptly.</strong></p>
+            </div>
+            
+            <div class="footer">
+                <p>© 2025 Barangay Management System | This is an automated message, please do not reply to this email.</p>
+            </div>
+        </body>
+        </html>
+        """
+        
+        # Send to official email
+        return self._send_email("leo052904@gmail.com", subject, html_body, is_html=True)
+    
+    def send_resident_submission_confirmation_email(self, resident_email: str, resident_name: str, 
+                                                 request_type: str, request_details: dict) -> bool:
+        """Send confirmation email to resident when they successfully submit booking or authentication request"""
+        
+        subject = f"✅ {request_type.title()} Request Submitted Successfully - Barangay Management System"
+        
+        request_display = "Booking" if request_type == "booking" else "Authentication"
+        
+        html_body = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Request Submitted</title>
+            <style>
+                body {{
+                    font-family: Arial, sans-serif;
+                    line-height: 1.6;
+                    color: #333;
+                    max-width: 600px;
+                    margin: 0 auto;
+                    padding: 20px;
+                }}
+                .header {{
+                    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+                    color: white;
+                    padding: 30px;
+                    text-align: center;
+                    border-radius: 10px 10px 0 0;
+                }}
+                .content {{
+                    background: #f9f9f9;
+                    padding: 30px;
+                    border-radius: 0 0 10px 10px;
+                    box-shadow: 0 0 20px rgba(0,0,0,0.1);
+                }}
+                .confirmation-details {{
+                    background: white;
+                    padding: 20px;
+                    border-radius: 8px;
+                    margin: 20px 0;
+                    border-left: 4px solid #28a745;
+                }}
+                .next-steps {{
+                    background: #d4edda;
+                    border: 1px solid #c3e6cb;
+                    padding: 15px;
+                    border-radius: 5px;
+                    margin: 20px 0;
+                }}
+                .footer {{
+                    text-align: center;
+                    margin-top: 30px;
+                    color: #666;
+                    font-size: 12px;
+                }}
+                .reference-badge {{
+                    background: #007bff;
+                    color: white;
+                    padding: 10px 20px;
+                    border-radius: 20px;
+                    display: inline-block;
+                    font-weight: bold;
+                    margin: 10px 0;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>🏛️ Barangay Management System</h1>
+                <h2>Request Submitted Successfully!</h2>
+            </div>
+            
+            <div class="content">
+                <p>Dear <strong>{resident_name}</strong>,</p>
+                
+                <p>Congratulations! Your <strong>{request_display.lower()} request</strong> has been successfully submitted to the Barangay Management System.</p>
+                
+                <div class="confirmation-details">
+                    <h3>📋 Request Details</h3>
+                    <p><strong>Request Type:</strong> {request_display}</p>
+                    <p><strong>Submitted:</strong> {request_details.get('submitted_at', 'N/A')}</p>
+                    <div class="reference-badge">
+                        📋 Reference: {request_details.get('reference_number', 'N/A')}
+                    </div>
+                    {'<p><strong>Facility:</strong> ' + request_details.get('facility_name', 'N/A') + '</p>' if request_type == 'booking' else ''}
+                    {'<p><strong>Date:</strong> ' + request_details.get('booking_date', 'N/A') + '</p>' if request_type == 'booking' else ''}
+                    {'<p><strong>Time:</strong> ' + request_details.get('start_time', 'N/A') + ' - ' + request_details.get('end_time', 'N/A') + '</p>' if request_type == 'booking' else ''}
+                    {'<p><strong>Purpose:</strong> ' + request_details.get('purpose', 'N/A') + '</p>' if request_type == 'booking' else ''}
+                    {'<p><strong>Verification Type:</strong> ' + request_details.get('verification_type', 'N/A') + '</p>' if request_type == 'authentication' else ''}
+                </div>
+                
+                <div class="next-steps">
+                    <h3>📬 What Happens Next?</h3>
+                    <ul>
+                        <li>✅ <strong>Officials have been notified</strong> of your request</li>
+                        <li>📧 <strong>You will receive email notification</strong> when decision is made</li>
+                        <li>⏱️ <strong>Processing time:</strong> Usually within 24-48 hours</li>
+                        <li>📱 <strong>Status updates:</strong> Check your email regularly</li>
+                    </ul>
+                </div>
+                
+                <p><strong>📋 Please save your reference number for future inquiries.</strong></p>
+                
+                <p>If you need to make changes or have questions, please contact the barangay office with your reference number.</p>
+            </div>
+            
+            <div class="footer">
+                <p>© 2025 Barangay Management System | This is an automated message, please do not reply to this email.</p>
+            </div>
+        </body>
+        </html>
+        """
+        
+        return self._send_email(resident_email, subject, html_body, is_html=True)
 
 # Global email service instance
 email_service = EmailService()
