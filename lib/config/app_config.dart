@@ -2,8 +2,8 @@
 /// Cloudflare Tunnel for Global Access
 
 class AppConfig {
-  // Cloudflare tunnel URL
-  static String _baseUrl = 'https://suffering-mixer-referral-spies.trycloudflare.com';
+  // Cloudflare tunnel URL (your permanent domain)
+  static String _baseUrl = 'https://barangayreserve.dpdns.org';
   
   /// Get the current base URL
   static String get baseUrl => _baseUrl;
