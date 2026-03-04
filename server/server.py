@@ -2320,8 +2320,27 @@ def update_verification_request(request_id):
             if data.get('status') == 'approved':
                 # For residents: verified = 1, For non-residents: verified = 2
                 is_verified = 1 if verification_type == 'resident' else 2
+            elif data.get('status') == 'rejected':
+                # 🎯 CRITICAL FIX: Preserve Non-Resident status when upgrade request is rejected
+                # Get current user verification status before making changes
+                cursor.execute('''
+                    SELECT verified FROM users 
+                    WHERE id = (SELECT user_id FROM verification_requests WHERE id = ?)
+                ''', (request_id,))
+                current_verified = cursor.fetchone()[0]
+                
+                # If user is currently verified as Non-Resident (verified = 2), keep that status
+                # Only set to unverified (0) if they were truly unverified
+                if current_verified == 2:  # Non-Resident
+                    is_verified = 2  # Keep Non-Resident status
+                    discount_rate = 0.05  # Keep Non-Resident discount
+                    print(f"🎯 Preserving Non-Resident status for user after rejection")
+                else:
+                    is_verified = 0  # Only unverified users become unverified
+                    discount_rate = 0.0
+                    print(f"🔄 Setting user to unverified after rejection")
             else:
-                is_verified = 0  # rejected
+                is_verified = 0  # rejected (fallback)
                 discount_rate = 0.0
             
             # Update user verification and discount

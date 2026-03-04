@@ -478,11 +478,11 @@ class EmailService:
             <div class="content">
                 <p>Dear <strong>{recipient_name}</strong>,</p>
                 
-                <p>We regret to inform you that your {verification_display.lower()} verification request has been <strong>rejected</strong>, Please Refresh your profile page so you can submit a verification request again, Make sure the requirements you give are valid.</p>
+                <p>We regret to inform you that your {verification_display.lower()} verification request has been <strong>rejected</strong>. Please note that if you are currently verified as a Non-Resident, your verification status remains unchanged. If you are unverified, please refresh your profile page to submit a new verification request with valid requirements.</p>
                 
                 <div class="verification-details">
-                    <h3>📋 Verification Details</h3>
-                    <p><strong>Status:</strong> <span style="color: #dc3545;">❌ REJECTED</span></p>
+                    <h3> Verification Details</h3>
+                    <p><strong>Status:</strong> <span style="color: #dc3545;"> REJECTED</span></p>
                     <p><strong>Verification Type:</strong> {verification_display}</p>
                     <p><strong>Review Date:</strong> {datetime.now().strftime('%B %d, %Y')}</p>
                 </div>
