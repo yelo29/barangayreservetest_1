@@ -722,15 +722,15 @@ def check_booking_conflict():
         
         # Check for existing bookings at the same time (excluding user's own bookings)
         cursor.execute('''
-            SELECT id, user_email, created_at, status
+            SELECT id, user_id, created_at, status
             FROM bookings 
             WHERE facility_id = ? 
-            AND date = ? 
-            AND timeslot = ?
-            AND user_email != ?
+            AND booking_date = ? 
+            AND start_time = ?
+            AND user_id != ?
             AND status IN ('pending', 'approved')
             ORDER BY created_at DESC
-        ''', (data['facility_id'], data['date'], data['timeslot'], data['user_email']))
+        ''', (data['facility_id'], data['date'], data['timeslot'], user_id))
         
         existing_bookings = cursor.fetchall()
         print(f"🔍 DEBUG: Found {len(existing_bookings)} existing bookings for this time slot")
@@ -740,18 +740,27 @@ def check_booking_conflict():
         if existing_bookings:
             # Return conflict information
             latest_booking = existing_bookings[0]
+            
+            # Get user email for response
+            cursor.execute('SELECT email FROM users WHERE id = ?', (latest_booking[1],))
+            user_email_result = cursor.fetchone()
+            user_email = user_email_result[0] if user_email_result else 'Unknown'
+            
+            conn.close()
+            
             return jsonify({
                 'success': True,
                 'has_conflict': True,
                 'conflict_info': {
                     'booking_id': latest_booking[0],
-                    'user_email': latest_booking[1],
+                    'user_email': user_email,
                     'created_at': latest_booking[2],
                     'status': latest_booking[3],
                     'message': 'We are very sorry but someone already booked that certain Time. Please pick a different time instead'
                 }
             })
         else:
+            conn.close()
             return jsonify({
                 'success': True,
                 'has_conflict': False,
@@ -761,6 +770,9 @@ def check_booking_conflict():
     except Exception as e:
         print(f"❌ Error checking booking conflict: {e}")
         return jsonify({'success': False, 'message': f'Error checking conflict: {str(e)}'}), 500
+    finally:
+        if 'conn' in locals():
+            conn.close()
 
 @app.route('/api/bookings', methods=['POST'])
 def create_booking():
@@ -814,13 +826,16 @@ def create_booking():
         print(f"🔍 DEBUG: User email: {data['user_email']}")
         print(f"🔍 DEBUG: Timeslot: {data['timeslot']}")
         
-        # Check if USER already has this exact time slot (prevent duplicate user bookings)
+        # Only check for CURRENT USER's existing bookings (prevent duplicates)
+        print(f"🔍 DEBUG: Checking duplicate booking for facility_id={data['facility_id']}, date={data['date']}, timeslot={data['timeslot']}, user_id={user_id}")
         cursor.execute('''
             SELECT id, user_id, status FROM bookings 
             WHERE facility_id = ? AND booking_date = ? AND start_time = ? AND user_id = ?
+            AND status IN ('pending', 'approved')
         ''', (data['facility_id'], data['date'], data['timeslot'], user_id))
         
         user_existing_booking = cursor.fetchone()
+        print(f"🔍 DEBUG: Found existing booking: {user_existing_booking}")
         
         # If user already has this exact time slot, block it
         if user_existing_booking:
@@ -829,92 +844,6 @@ def create_booking():
                 'message': 'You already have a booking for this time slot. Please choose a different time.',
                 'error_type': 'duplicate_user_booking'
             }), 409
-        
-        # AUTO-REJECTION LOGIC FOR OFFICIAL BOOKINGS
-        rejected_resident_bookings = []
-        if is_official_booking:
-            print(f"🏆 OFFICIAL BOOKING DETECTED - Checking for resident bookings (pending + approved) for time slot {data['timeslot']}...")
-            print(f"🔍 DEBUG: Auto-rejection logic triggered for timeslot: {data['timeslot']}")
-            
-            # Find resident bookings (pending AND approved) that overlap with this time slot
-            print(f"🔍 DEBUG: Timeslot value: '{data['timeslot']}' (type: {type(data['timeslot'])})")
-            print(f"🔍 DEBUG: Timeslot == 'ALL DAY': {data['timeslot'] == 'ALL DAY'}")
-            
-            # Check if this is an ALL DAY booking (handle potential string concatenation issues)
-            is_all_day = data['timeslot'] == 'ALL DAY' or data['timeslot'].startswith('ALL DAY')
-            print(f"🔍 DEBUG: is_all_day: {is_all_day}")
-            
-            if is_all_day:
-                # For ALL DAY bookings, find ALL resident bookings on this date
-                print(f"🔍 DEBUG: ALL DAY query - facility_id: {data['facility_id']}, date: {data['date']}, user_id: {user_id}")
-                cursor.execute('''
-                    SELECT b.id, b.user_id, b.start_time, b.end_time, b.status, u.email as user_email, u.full_name
-                    FROM bookings b
-                    LEFT JOIN users u ON b.user_id = u.id
-                    WHERE b.facility_id = ? 
-                    AND b.booking_date = ? 
-                    AND (b.status = 'pending' OR b.status = 'approved')
-                    AND (u.role = 'resident' OR u.role = '0' OR u.role IS NULL OR u.role LIKE '0.%')
-                    AND b.user_id != ?
-                ''', (data['facility_id'], data['date'], user_id))
-            else:
-                # For specific time slots, find exact matches
-                cursor.execute('''
-                    SELECT b.id, b.user_id, b.start_time, b.end_time, b.status, u.email as user_email, u.full_name
-                    FROM bookings b
-                    LEFT JOIN users u ON b.user_id = u.id
-                    WHERE b.facility_id = ? 
-                    AND b.booking_date = ? 
-                    AND b.start_time = ?
-                    AND (b.status = 'pending' OR b.status = 'approved')
-                    AND (u.role = 'resident' OR u.role = '0' OR u.role IS NULL OR u.role LIKE '0.%')
-                    AND b.user_id != ?
-                ''', (data['facility_id'], data['date'], data['timeslot'], user_id))
-            
-            overlapping_bookings = cursor.fetchall()
-            print(f"🔍 DEBUG: Found {len(overlapping_bookings)} overlapping resident bookings")
-            
-            # Auto-reject overlapping resident bookings with apology message
-            apology_message = """Dear Resident,
-
-We apologize but your booking has been automatically cancelled due to an official Barangay Event.
-
-Your payment will be refunded within 3-5 business days.
-
-Please check your SMS and Email for more Updates.
-
-Thank you for your understanding and cooperation.
-
-Barangay Management"""
-            
-            for booking in overlapping_bookings:
-                # Extract resident booking info
-                booking_id = booking[0]
-                resident_email = booking[5] if booking[5] else 'Unknown'
-                resident_name = booking[6] if booking[6] else 'Resident'
-                resident_timeslot = booking[2]  # Use just the start_time (already contains full timeslot)
-                resident_status = booking[4]  # Get original status (pending/approved)
-                
-                print(f"🚫 AUTO-REJECTING {resident_status.upper()} booking {booking_id} for {resident_name} ({resident_email}) - Time: {resident_timeslot}")
-                
-                # Update resident booking to rejected with apology
-                cursor.execute('''
-                    UPDATE bookings 
-                    SET status = 'rejected', 
-                        rejection_reason = ?,
-                        updated_at = CURRENT_TIMESTAMP
-                    WHERE id = ?
-                ''', (apology_message, booking_id))
-                
-                rejected_resident_bookings.append({
-                    'booking_id': booking_id,
-                    'resident_name': resident_name,
-                    'resident_email': resident_email,
-                    'timeslot': resident_timeslot  # Use resident's actual time slot
-                })
-            
-            if rejected_resident_bookings:
-                print(f"✅ Auto-rejected {len(rejected_resident_bookings)} resident bookings")
         
         # Check if user has too many pending bookings (optional limit)
         cursor.execute('''
@@ -929,9 +858,6 @@ Barangay Management"""
                 'message': 'You have too many pending bookings. Please wait for approval or cancel some bookings.',
                 'error_type': 'too_many_pending'
             }), 429
-        
-        # ALLOW multiple users to book same time slot (competitive booking)
-        # No need to check if other users have this slot - that's the point!
         
         # Create booking
         booking_status = 'approved' if is_official_booking else data.get('status', 'pending')
@@ -962,6 +888,62 @@ Barangay Management"""
         booking_id = cursor.lastrowid
         conn.commit()
         
+        # 📧 SEND EMAIL NOTIFICATIONS FOR BOOKING SUBMISSION
+        try:
+            from email_service import EmailService
+            email_service = EmailService()
+            
+            # Get facility info for emails
+            cursor.execute('SELECT name FROM facilities WHERE id = ?', (data['facility_id'],))
+            facility_result = cursor.fetchone()
+            facility_name = facility_result[0] if facility_result else 'Unknown Facility'
+            
+            # Get user details
+            cursor.execute('SELECT full_name, email, verified FROM users WHERE id = ?', (user_id,))
+            user_result = cursor.fetchone()
+            user_full_name = user_result[0] if user_result else 'Resident'
+            user_email = user_result[1] if user_result else data['user_email']
+            user_verification_status = user_result[2] if user_result else 0  # 0=unverified, 1=verified
+            
+            # Prepare booking details for emails
+            booking_details = {
+                'facility_name': facility_name,
+                'booking_date': data['date'],
+                'timeslot': data['timeslot'],  # Email template expects 'timeslot'
+                'start_time': data['timeslot'],
+                'end_time': data['timeslot'],
+                'purpose': data.get('purpose', ''),
+                'total_amount': data.get('total_amount', 0),
+                'status': booking_status,
+                'booking_reference': f'BR{datetime.now().strftime("%Y%m%d%H%M%S")}{user_id}',
+                'reference_number': f'BR{datetime.now().strftime("%Y%m%d%H%M%S")}{user_id}',  # Email template expects 'reference_number'
+                'submitted_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')  # Email template expects 'submitted_at'
+            }
+            
+            resident_details = {
+                'full_name': user_full_name,  # Email template expects 'full_name'
+                'email': user_email,  # Use actual email from database
+                'contact_number': data.get('contact_number', ''),  # Email template expects 'contact_number'
+                'verification_status': 'Verified Resident' if user_verification_status == 1 else 'Verified Non-Resident' if user_verification_status == 2 else 'Unverified'  # Handle all verification levels
+            }
+            
+            # Send official notification email
+            if not is_official_booking:  # Only notify for resident bookings
+                official_sent = email_service.send_official_notification_email(
+                    'booking', resident_details, booking_details
+                )
+                print(f"📧 Official notification email sent: {official_sent}")
+            
+            # Send resident confirmation email
+            if not is_official_booking:  # Only send to residents
+                resident_sent = email_service.send_resident_submission_confirmation_email(
+                    data['user_email'], user_full_name, 'booking', booking_details
+                )
+                print(f"📧 Resident confirmation email sent to {data['user_email']}: {resident_sent}")
+                
+        except Exception as e:
+            print(f"❌ Failed to send booking notification emails: {e}")
+        
         # Debug: Check if receipt was saved
         if data.get('receipt_base64'):
             print(f"✅ RECEIPT SAVED: receipt_base64 length = {len(str(data['receipt_base64']))} for booking {booking_id}")
@@ -970,9 +952,6 @@ Barangay Management"""
         
         # Prepare response message
         response_message = 'Booking submitted successfully!' if not is_official_booking else 'Official booking created successfully!'
-        
-        if is_official_booking and rejected_resident_bookings:
-            response_message += f' Auto-rejected {len(rejected_resident_bookings)} resident booking(s).'
         
         # Add auto-refresh metadata for frontend
         refresh_data = {
@@ -1000,17 +979,12 @@ Barangay Management"""
             }
         }
         
-        # If official booking rejected resident bookings, add those to refresh data
-        if rejected_resident_bookings:
-            refresh_data['rejected_bookings'] = rejected_resident_bookings
-            refresh_data['requires_refresh'].append('resident_notifications')
-        
         return jsonify({
             'success': True, 
             'message': response_message,
             'booking_id': booking_id,
             'status': booking_status,
-            'rejected_resident_bookings': rejected_resident_bookings,
+            'rejected_resident_bookings': [],  # Empty since auto-rejection is disabled
             'note': 'Multiple users may book the same time slot. First approved booking wins!' if not is_official_booking else 'Official bookings take priority over resident bookings.',
             'refresh_data': refresh_data  # Auto-refresh instructions
         })
@@ -2213,7 +2187,7 @@ def verification_requests():
             
             # 🔒 BAN VALIDATION: Check if user is banned before allowing verification request
             print(f"🔍 DEBUG: About to check user ban status...")
-            cursor.execute('SELECT email, is_banned, ban_reason FROM users WHERE id = ?', (data.get('residentId'),))
+            cursor.execute('SELECT email, is_banned, ban_reason, full_name FROM users WHERE id = ?', (data.get('residentId'),))
             user_result = cursor.fetchone()
             print(f"🔍 DEBUG: User ban status check completed")
             
@@ -2223,6 +2197,7 @@ def verification_requests():
             user_email = user_result[0]
             is_banned = user_result[1]
             ban_reason = user_result[2]
+            user_full_name = user_result[3]  # Get full name from database
             
             if is_banned:
                 print(f"🚨 BANNED USER ATTEMPTED VERIFICATION REQUEST: {user_email} - Reason: {ban_reason}")
@@ -2261,8 +2236,52 @@ def verification_requests():
                     WHERE id = ?
                 ''', (data.get('contactNumber'), data.get('residentId')))
             
+            # 📧 GET USER DETAILS BEFORE CLOSING CONNECTION
+            user_email = user_result[0] if user_result else data['user_email']  # user_result[0] is email
+            user_full_name = user_result[3] if user_result else 'Resident'  # user_result[3] is full_name
+            user_verification_status = user_verification[0] if user_verification else 0  # 0=unverified, 1=verified
+            
             conn.commit()
             conn.close()
+            
+            # 📧 SEND EMAIL NOTIFICATIONS FOR VERIFICATION REQUEST SUBMISSION
+            try:
+                from email_service import EmailService
+                email_service = EmailService()
+                
+                # Prepare verification details for emails
+                verification_details = {
+                    'verification_type': data.get('verificationType', ''),
+                    'full_name': user_full_name,
+                    'address': data.get('address', ''),
+                    'contact_number': data.get('contactNumber', ''),
+                    'id_type': data.get('idType', 'National ID'),
+                    'submission_date': data.get('submittedAt', datetime.now().strftime('%Y-%m-%d')),
+                    'submitted_at': data.get('submittedAt', datetime.now().strftime('%Y-%m-%d')),  # Email template expects 'submitted_at'
+                    'reference_number': f"VR-{data.get('residentId')}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                }
+                
+                resident_details = {
+                    'full_name': user_full_name,  # Email template expects 'full_name'
+                    'email': user_email,
+                    'contact_number': data.get('contactNumber', ''),  # Email template expects 'contact_number'
+                    'verification_status': 'Verified Resident' if user_verification_status == 1 else 'Verified Non-Resident' if user_verification_status == 2 else 'Unverified'  # Handle all verification levels
+                }
+                
+                # Send official notification email
+                official_sent = email_service.send_official_notification_email(
+                    'authentication', resident_details, verification_details
+                )
+                print(f"📧 Official notification email sent for verification request: {official_sent}")
+                
+                # Send resident confirmation email
+                resident_sent = email_service.send_resident_submission_confirmation_email(
+                    user_email, user_full_name, 'authentication', verification_details
+                )
+                print(f"📧 Resident confirmation email sent to {user_email}: {resident_sent}")
+                
+            except Exception as e:
+                print(f"❌ Failed to send verification notification emails: {e}")
             
             print("✅ Verification request created successfully")
             return jsonify({'success': True, 'message': 'Verification request submitted successfully'})
