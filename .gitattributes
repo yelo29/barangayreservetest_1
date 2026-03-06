@@ -1,1 +1,2 @@
 server/*.db filter=lfs diff=lfs merge=lfs -text
+server/*.sqlite* filter=lfs diff=lfs merge=lfs -text
