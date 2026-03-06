@@ -916,7 +916,6 @@ def create_booking():
                 'total_amount': data.get('total_amount', 0),
                 'status': booking_status,
                 'booking_reference': f'BR{datetime.now().strftime("%Y%m%d%H%M%S")}{user_id}',
-                'reference_number': f'BR{datetime.now().strftime("%Y%m%d%H%M%S")}{user_id}',  # Email template expects 'reference_number'
                 'submitted_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')  # Email template expects 'submitted_at'
             }
             
@@ -2257,8 +2256,7 @@ def verification_requests():
                     'contact_number': data.get('contactNumber', ''),
                     'id_type': data.get('idType', 'National ID'),
                     'submission_date': data.get('submittedAt', datetime.now().strftime('%Y-%m-%d')),
-                    'submitted_at': data.get('submittedAt', datetime.now().strftime('%Y-%m-%d')),  # Email template expects 'submitted_at'
-                    'reference_number': f"VR-{data.get('residentId')}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                    'submitted_at': data.get('submittedAt', datetime.now().strftime('%Y-%m-%d'))  # Email template expects 'submitted_at'
                 }
                 
                 resident_details = {
