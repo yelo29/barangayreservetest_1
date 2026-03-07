@@ -449,7 +449,7 @@ class _ResidentBookingsTabState extends State<ResidentBookingsTab> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              booking['rejection_reason'] ?? 'This date has been Rejected by Officials due to fake Reciept or Wrong downpayment given.',
+                              _getRejectionMessage(booking),
                               style: TextStyle(
                                 fontSize: 12,
                                 color: Colors.red.shade600,
@@ -460,7 +460,7 @@ class _ResidentBookingsTabState extends State<ResidentBookingsTab> {
                       )
                     else
                       Text(
-                        booking['rejection_reason'] ?? 'This date has been Rejected by Officials due to fake Reciept or Wrong downpayment given.',
+                        _getRejectionMessage(booking),
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.red.shade600,
@@ -593,5 +593,16 @@ class _ResidentBookingsTabState extends State<ResidentBookingsTab> {
     ];
     
     return '${months[dateTime.month - 1]} ${dateTime.day}, ${dateTime.year}';
+  }
+
+  String _getRejectionMessage(Map<String, dynamic> booking) {
+    final rejectionReason = booking['rejection_reason']?.toString();
+    
+    if (rejectionReason == 'OFFICIAL_OVERLAP') {
+      return 'This booking was automatically rejected due to an official barangay event. We apologize for the inconvenience. Please wait for refund in 2-3 days, depending on your payment status';
+    }
+    
+    // Default message for other rejections
+    return booking['rejection_reason'] ?? 'This date has been Rejected by Officials due to fake Reciept or Wrong downpayment given.';
   }
 }

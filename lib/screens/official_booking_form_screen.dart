@@ -940,7 +940,7 @@ class _OfficialBookingFormScreenState extends State<OfficialBookingFormScreen> w
                             overflow: TextOverflow.ellipsis,
                           ),
                           Text(
-                            'Time: ${booking['timeslot']}',
+                            'Time: ${booking['original_timeslot']}',
                             style: const TextStyle(fontSize: 11),
                             overflow: TextOverflow.ellipsis,
                           ),

@@ -874,43 +874,105 @@ def create_booking():
             overlapping_bookings = cursor.fetchall()
             print(f"🔍 DEBUG: Found {len(overlapping_bookings)} overlapping resident bookings")
             
-            # Auto-reject overlapping resident bookings with apology message
-            apology_message = """Dear Resident,
-
-We apologize but your booking has been automatically cancelled due to an official Barangay Event.
-
-Your payment will be refunded within 3-5 business days.
-
-Please check your SMS and Email for more Updates.
-
-Thank you for your understanding and cooperation.
-
-Barangay Management"""
+            # Get facility name for emails
+            cursor.execute('SELECT name FROM facilities WHERE id = ?', (data['facility_id'],))
+            facility_result = cursor.fetchone()
+            facility_name = facility_result[0] if facility_result else 'Unknown Facility'
             
+            # Get official user details for emails
+            cursor.execute('SELECT full_name FROM users WHERE id = ?', (user_id,))
+            official_result = cursor.fetchone()
+            official_name = official_result[0] if official_result else 'Barangay Official'
+            
+            # Auto-reject overlapping resident bookings with proper email service
             for booking in overlapping_bookings:
                 # Extract resident booking info
                 booking_id = booking[0]
-                resident_email = booking[5] if booking[5] else 'Unknown'
-                resident_name = booking[6] if booking[6] else 'Resident'
-                resident_timeslot = booking[2]  # Use just the start_time (already contains full timeslot)
+                resident_user_id = booking[1]
+                resident_start_time = booking[2]
+                resident_end_time = booking[3]
                 resident_status = booking[4]  # Get original status (pending/approved)
+                booking_reference = booking[7] if len(booking) > 7 else f'BR{booking_id}'
                 
-                print(f"🚫 AUTO-REJECTING {resident_status.upper()} booking {booking_id} for {resident_name} ({resident_email}) - Time: {resident_timeslot}")
+                print(f"🚫 AUTO-REJECTING {resident_status.upper()} booking {booking_id} - Time: {resident_start_time}")
                 
-                # Update resident booking to rejected with apology
+                # Get resident details for email
+                cursor.execute('SELECT email, full_name FROM users WHERE id = ?', (resident_user_id,))
+                resident = cursor.fetchone()
+                
+                if resident:
+                    resident_email = resident[0]
+                    resident_name = resident[1]
+                    
+                    # Prepare booking details for overlap email
+                    overlap_booking_details = {
+                        'facility_name': facility_name,
+                        'booking_date': data['date'],
+                        'timeslot': f"{resident_start_time} - {resident_end_time}",
+                        'start_time': resident_start_time,
+                        'end_time': resident_end_time,
+                        'purpose': 'Resident booking',
+                        'status': 'rejected',
+                        'booking_reference': booking_reference,
+                        'submitted_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    }
+                    
+                    # Get actual resident booking purpose
+                    cursor.execute('SELECT purpose FROM bookings WHERE id = ?', (booking_id,))
+                    purpose_result = cursor.fetchone()
+                    if purpose_result:
+                        overlap_booking_details['purpose'] = purpose_result[0]
+                    
+                    # Prepare official booking details for email
+                    official_booking_details = {
+                        'facility_name': facility_name,
+                        'booking_date': data['date'],
+                        'timeslot': 'ALL DAY',
+                        'start_time': 'ALL DAY',
+                        'end_time': 'ALL DAY',
+                        'purpose': data.get('purpose', 'Official barangay business'),
+                        'status': 'approved',
+                        'booking_reference': f'BR{datetime.now().strftime("%Y%m%d%H%M%S")}{user_id}',
+                        'official_name': official_name,
+                        'submitted_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    }
+                    
+                    # Send overlap email to resident
+                    try:
+                        from email_service import EmailService
+                        email_service = EmailService()
+                        
+                        overlap_sent = email_service.send_booking_overlap_email(
+                            resident_email=resident_email,
+                            resident_name=resident_name,
+                            original_booking=overlap_booking_details,
+                            official_booking=official_booking_details
+                        )
+                        
+                        print(f"📧 Overlap email sent to {resident_email}: {overlap_sent}")
+                        
+                    except Exception as email_error:
+                        print(f"❌ Error sending overlap email to {resident_email}: {email_error}")
+                
+                # Update resident booking to rejected with proper reason
                 cursor.execute('''
                     UPDATE bookings 
                     SET status = 'rejected', 
-                        rejection_reason = ?,
+                        rejection_reason = 'OFFICIAL_OVERLAP',
                         updated_at = CURRENT_TIMESTAMP
                     WHERE id = ?
-                ''', (apology_message, booking_id))
+                ''', (booking_id,))
                 
                 rejected_resident_bookings.append({
                     'booking_id': booking_id,
-                    'resident_name': resident_name,
-                    'resident_email': resident_email,
-                    'timeslot': resident_timeslot  # Use resident's actual time slot
+                    'booking_reference': booking_reference,
+                    'resident_name': resident_name if resident else 'Unknown Resident',
+                    'resident_email': resident_email if resident else 'unknown@email.com',
+                    'original_timeslot': resident_start_time,
+                    'original_end_time': resident_end_time.split(' - ')[-1] if ' - ' in resident_end_time else resident_end_time,
+                    'original_status': 'rejected',
+                    'facility_name': facility_name,
+                    'overlap_reason': 'Official booking for entire day'
                 })
             
             if rejected_resident_bookings:

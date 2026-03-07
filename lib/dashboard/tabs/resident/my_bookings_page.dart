@@ -269,7 +269,7 @@ class MyBookingsPage extends StatelessWidget {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              booking['rejection_reason'] ?? 'This date has been booked by Officials, refund of your payments will be done shortly, check your email or SMS for further details.',
+                              _getRejectionMessage(booking),
                               style: TextStyle(
                                 fontSize: 12,
                                 color: Colors.red.shade600,
@@ -307,5 +307,16 @@ class MyBookingsPage extends StatelessWidget {
         );
       },
     );
+  }
+
+  String _getRejectionMessage(Map<String, dynamic> booking) {
+    final rejectionReason = booking['rejection_reason']?.toString();
+    
+    if (rejectionReason == 'OFFICIAL_OVERLAP') {
+      return 'This booking was automatically rejected due to an official barangay event. We apologize for the inconvenience.';
+    }
+    
+    // Default message for other rejections
+    return booking['rejection_reason'] ?? 'This date has been booked by Officials, refund of your payments will be done shortly, check your email or SMS for further details.';
   }
 }
