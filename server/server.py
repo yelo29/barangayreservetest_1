@@ -408,31 +408,54 @@ def get_bookings():
                 booking_dict = dict(booking)
                 
                 # Debug logging for privacy check
-                print(f"🔍 PRIVACY CHECK: booking_email='{booking_dict['user_email']}' vs user_email='{user_email}'")
-                
-                # Remove sensitive information for residents (but keep email for official detection)
-                if booking_dict['user_email'] and user_email and booking_dict['user_email'].lower().strip() != user_email.lower().strip():
-                    # Store original email for official detection
-                    original_email = booking_dict['user_email']
+                # Only apply privacy masking for non-official users
+                if user_role != 'official':
+                    # Get user_id for the current user
+                    current_user_id = None
+                    if user_email:
+                        cursor.execute('SELECT id FROM users WHERE email = ?', (user_email,))
+                        user_result = cursor.fetchone()
+                        if user_result:
+                            current_user_id = user_result['id']
                     
-                    # Remove sensitive details for other users' bookings
-                    booking_dict['full_name'] = 'Reserved'
-                    booking_dict['user_email'] = 'private'
-                    booking_dict['contact_number'] = 'private'
-                    booking_dict['contact_address'] = 'private'
-                    booking_dict['receipt_base64'] = None
-                    booking_dict['purpose'] = 'Private Booking'
+                    is_own_booking = (current_user_id and booking_dict['user_id'] == current_user_id and 
+                                    booking_dict['user_email'] and user_email and 
+                                    booking_dict['user_email'].lower().strip() == user_email.lower().strip())
                     
-                    # Add a flag for official detection (preserves original email logic)
-                    booking_dict['is_official_booking'] = (
-                        original_email and (
-                            'official' in original_email or 
-                            'barangay' in original_email or 
-                            'admin' in original_email
-                        )
-                    )
-                    
-                    print(f"🔍 PRIVACY APPLIED: Masked booking for user {original_email}")
+                    if not is_own_booking:
+                        # Apply privacy masking for other residents' bookings
+                        if booking_dict['user_email'] and user_email and booking_dict['user_email'].lower().strip() != user_email.lower().strip():
+                            original_email = booking_dict['user_email']
+                            
+                            # Remove sensitive details but keep essential info
+                            booking_dict['full_name'] = 'Private' if booking_dict['full_name'] in ['None', '', 'N/A', 'Unknown'] else booking_dict['full_name']
+                            booking_dict['contact_number'] = 'Private' if booking_dict['contact_number'] in ['None', '', 'N/A', 'Unknown'] else booking_dict['contact_number']
+                            booking_dict['contact_address'] = 'Private' if booking_dict['contact_address'] in ['None', '', 'N/A', 'Unknown'] else booking_dict['contact_address']
+                            
+                            # Only mask receipt if it exists
+                            if booking_dict.get('receipt_base64'):
+                                booking_dict['receipt_base64'] = '[RECEIPT HIDDEN FOR PRIVACY]'
+                            
+                            # Mask purpose only if it contains sensitive info
+                            if booking_dict.get('purpose') and any(word in booking_dict.get('purpose', '').lower() for word in ['private', 'confidential', 'secret']):
+                                booking_dict['purpose'] = 'Private Purpose'
+                            else:
+                                booking_dict['purpose'] = booking_dict.get('purpose', '')
+                            
+                            # Store original email for official detection
+                            booking_dict['original_email'] = booking_dict['user_email']
+                            
+                            # Add flag for official detection
+                            booking_dict['is_official_booking'] = (
+                                'official' in original_email or 
+                                'barangay' in original_email or 
+                                'admin' in original_email
+                            )
+                            print(f"🔍 PRIVACY APPLIED: Masked booking for user {original_email}")
+                        else:
+                            print(f"🔍 PRIVACY NOT APPLIED: User can see full booking details")
+                    else:
+                        print(f"🔍 PRIVACY NOT APPLIED: User can see full booking details")
                 else:
                     print(f"🔍 PRIVACY NOT APPLIED: User can see full booking details")
                 
