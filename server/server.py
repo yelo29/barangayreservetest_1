@@ -941,9 +941,6 @@ def create_booking():
                 
                 # Send overlap email to resident
                 try:
-                    from email_service import EmailService
-                    email_service = EmailService()
-                    
                     overlap_sent = email_service.send_booking_overlap_email(
                         resident_email=resident_email,
                         resident_name=resident_name,
@@ -2331,9 +2328,6 @@ def verification_requests():
             
             # Send email notification to officials about the authentication request
             try:
-                from email_service import EmailService
-                email_service = EmailService()
-                
                 # Prepare resident details for email
                 resident_details = {
                     'full_name': data.get('fullName', ''),
