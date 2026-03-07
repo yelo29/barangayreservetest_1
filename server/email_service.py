@@ -156,7 +156,6 @@ class EmailService:
                     <p><strong>Facility:</strong> {booking_details.get('facility_name', 'N/A')}</p>
                     <p><strong>Date:</strong> {booking_details.get('booking_date', 'N/A')}</p>
                     <p><strong>Time:</strong> {booking_details.get('timeslot', 'N/A')}</p>
-                    <p><strong>Booking Reference:</strong> {booking_details.get('booking_reference', 'N/A')}</p>
                 </div>
                 
                 <div class="rejection-reason">
@@ -268,7 +267,6 @@ class EmailService:
                     <p><strong>Facility:</strong> {booking_details.get('facility_name', 'N/A')}</p>
                     <p><strong>Date:</strong> {booking_details.get('booking_date', 'N/A')}</p>
                     <p><strong>Time:</strong> {booking_details.get('timeslot', 'N/A')}</p>
-                    <p><strong>Booking Reference:</strong> {booking_details.get('booking_reference', 'N/A')}</p>
                     <p><strong>Status:</strong> <span style="color: #28a745;">✅ CONFIRMED</span></p>
                 </div>
                 
@@ -772,7 +770,6 @@ class EmailService:
                     <h3>📋 Request Details</h3>
                     <p><strong>Request Type:</strong> {request_display}</p>
                     <p><strong>Submitted:</strong> {request_details.get('submitted_at', 'N/A')}</p>
-                    <p><strong>Reference:</strong> {request_details.get('reference_number', 'N/A')}</p>
                     {'<p><strong>Facility:</strong> ' + request_details.get('facility_name', 'N/A') + '</p>' if request_type == 'booking' else ''}
                     {'<p><strong>Date:</strong> ' + request_details.get('booking_date', 'N/A') + '</p>' if request_type == 'booking' else ''}
                     {'<p><strong>Time:</strong> ' + request_details.get('start_time', 'N/A') + ' - ' + request_details.get('end_time', 'N/A') + '</p>' if request_type == 'booking' else ''}
@@ -860,15 +857,6 @@ class EmailService:
                     color: #666;
                     font-size: 12px;
                 }}
-                .reference-badge {{
-                    background: #007bff;
-                    color: white;
-                    padding: 10px 20px;
-                    border-radius: 20px;
-                    display: inline-block;
-                    font-weight: bold;
-                    margin: 10px 0;
-                }}
             </style>
         </head>
         <body>
@@ -906,9 +894,8 @@ class EmailService:
                     </ul>
                 </div>
                 
-                <p><strong>📋 Please save your reference number for future inquiries.</strong></p>
-                
-                <p>If you need to make changes or have questions, please contact the barangay office with your reference number.</p>
+                <p><strong>� Need to make changes or have questions?</strong></p>
+                <p>Please contact the barangay office using the customer service numbers available in your account settings. Officials will assist you with your booking or verification requests.</p>
             </div>
             
             <div class="footer">
