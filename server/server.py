@@ -2016,7 +2016,7 @@ def get_verification_status(user_id):
         
         # Get user data with correct field names
         cursor.execute('''
-            SELECT id, verified, verification_type, email 
+            SELECT id, verified, verification_type, email, role
             FROM users WHERE id = ?
         ''', (user_id,))
         user = cursor.fetchone()
@@ -2047,6 +2047,10 @@ def get_verification_status(user_id):
             can_submit = True  # ALLOWED: Can submit to upgrade to resident status
             lock_message = "You can submit a verification request to upgrade to Resident status"
             current_status = "verified_non_resident"
+        elif user['verified'] == 1 and user['role'] == 'official':  # Officials are treated as verified residents
+            can_submit = False
+            lock_message = "You are already verified as an Official with full benefits"
+            current_status = "verified_resident"
         elif has_pending:
             can_submit = False  
             lock_message = "You already submitted a Verification Request! wait for officials to either Reject or Approve your request"
@@ -2070,6 +2074,7 @@ def get_verification_status(user_id):
             'current_status': current_status,
             'verified': user['verified'],
             'verification_type': user['verification_type'],  # CRITICAL: Return actual verification_type
+            'role': user['role'],  # Include role for frontend logic
             'user_id': user['id'],
             'email': user['email']
         })
