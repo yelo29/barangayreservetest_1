@@ -652,15 +652,6 @@ class EmailService:
                     <li>💰 If applicable, refund will be processed automatically</li>
                     <li>📋 Priority booking will be offered for your next request</li>
                 </ul>
-                
-                <div style="background: #e7f3ff; border: 1px solid #b3d9ff; padding: 15px; border-radius: 5px; margin: 20px 0;">
-                    <h3>📞 Customer Service Contact</h3>
-                    <p><strong>For immediate assistance, please contact:</strong></p>
-                    <p>📱 <strong>Hotline:</strong> 0912-345-6789</p>
-                    <p>📧 <strong>Email:</strong> barangay.service@gmail.com</p>
-                    <p>🏢 <strong>Office:</strong> Barangay Hall (8:00 AM - 5:00 PM)</p>
-                    <p><em>Please mention your name and booking date for faster service.</em></p>
-                </div>
             </div>
             
             <div class="footer">
