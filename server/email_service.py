@@ -161,7 +161,6 @@ class EmailService:
                 <div class="rejection-reason">
                     <h3>🚫 Reason for Rejection</h3>
                     <p>{rejection_reason}</p>
-                    {f'<p><strong>Rejection Type:</strong> {rejection_type}</p>' if rejection_type else ''}
                 </div>
                 
                 {self._get_violation_warning(rejection_type) if rejection_type == 'fake_receipt' else ''}
