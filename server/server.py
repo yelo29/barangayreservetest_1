@@ -1046,6 +1046,56 @@ def create_booking():
         booking_id = cursor.lastrowid
         conn.commit()
         
+        # Send email notification to officials about new booking request (only for residents)
+        if not is_official_booking:
+            try:
+                # Get user details for email
+                cursor.execute('SELECT full_name, email, contact_number FROM users WHERE id = ?', (user_id,))
+                user_details = cursor.fetchone()
+                
+                if user_details:
+                    resident_name = user_details[0] if user_details[0] else 'Unknown Resident'
+                    resident_email = user_details[1] if user_details[1] else 'unknown@email.com'
+                    resident_contact = user_details[2] if len(user_details) > 2 and user_details[2] else 'Not provided'
+                    
+                    # Get facility name
+                    cursor.execute('SELECT name FROM facilities WHERE id = ?', (data['facility_id'],))
+                    facility_result = cursor.fetchone()
+                    facility_name = facility_result[0] if facility_result else 'Unknown Facility'
+                    
+                    # Prepare resident details for email
+                    resident_details = {
+                        'full_name': resident_name,
+                        'email': resident_email,
+                        'contact_number': resident_contact,
+                        'verification_status': 'Pending Booking Approval'
+                    }
+                    
+                    # Prepare booking details for email
+                    booking_details_for_email = {
+                        'facility_name': facility_name,
+                        'booking_date': data['date'],
+                        'start_time': data['timeslot'],
+                        'end_time': data['timeslot'],
+                        'purpose': data.get('purpose', 'Not specified'),
+                        'submitted_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        'booking_reference': f'BR{datetime.now().strftime("%Y%m%d%H%M%S")}{user_id}',
+                        'status': 'pending'
+                    }
+                    
+                    # Send notification email to officials
+                    notification_sent = email_service.send_official_notification_email(
+                        request_type="booking",
+                        resident_details=resident_details,
+                        request_details=booking_details_for_email
+                    )
+                    
+                    print(f"📧 Booking notification email sent to officials: {notification_sent}")
+                    
+            except Exception as email_error:
+                print(f"❌ Error sending booking notification email to officials: {email_error}")
+                # Don't fail the booking creation if email fails
+        
         # Debug: Check if receipt was saved
         if data.get('receipt_base64'):
             print(f"✅ RECEIPT SAVED: receipt_base64 length = {len(str(data['receipt_base64']))} for booking {booking_id}")
