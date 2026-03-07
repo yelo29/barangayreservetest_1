@@ -523,11 +523,37 @@ class EmailService:
                 <p style="color: #721c24;">Please ensure all payment receipts are genuine and verifiable.</p>
             </div>
             """
-        return ""
+        return "No violation warning available"
     
     def send_booking_overlap_email(self, resident_email: str, resident_name: str, 
                                  original_booking: dict, official_booking: dict) -> bool:
         """Send email when official's booking overlaps with resident's booking"""
+        
+        # Validate required fields before sending
+        if not resident_email or resident_email == 'unknown@email.com':
+            print(f"❌ ERROR: Invalid resident email: {resident_email}")
+            return False
+        
+        if not resident_name or resident_name == 'Unknown Resident':
+            print(f"❌ ERROR: Invalid resident name: {resident_name}")
+            return False
+        
+        # Validate booking data
+        required_fields = {
+            'facility_name': original_booking.get('facility_name'),
+            'booking_date': original_booking.get('booking_date'),
+            'start_time': original_booking.get('start_time'),
+            'end_time': original_booking.get('end_time'),
+            'purpose': original_booking.get('purpose'),
+            'official_name': official_booking.get('official_name'),
+            'official_booking_date': official_booking.get('booking_date'),
+            'official_purpose': official_booking.get('purpose')  # Field is 'purpose' in official_booking_details
+        }
+        
+        missing_fields = [field for field, value in required_fields.items() if not value or value == 'N/A']
+        if missing_fields:
+            print(f"❌ ERROR: Missing booking data fields: {missing_fields}")
+            return False
         
         subject = "⚠️ Booking Overlap Notification - Barangay Facility"
         
@@ -598,24 +624,25 @@ class EmailService:
             </div>
             
             <div class="content">
-                <p>Dear <strong>{resident_name}</strong>,</p>
+                <p>Dear <strong>{resident_name if resident_name and resident_name != 'Unknown Resident' else 'Valued Resident'}</strong>,</p>
                 
                 <p>We sincerely apologize, but your existing booking has been overlapped by an official booking. Please see the details below:</p>
                 
                 <div class="booking-details">
                     <h3>📅 Your Original Booking</h3>
-                    <p><strong>Facility:</strong> {original_booking.get('facility_name', 'N/A')}</p>
-                    <p><strong>Date:</strong> {original_booking.get('booking_date', 'N/A')}</p>
-                    <p><strong>Time:</strong> {original_booking.get('start_time', 'N/A')} - {original_booking.get('end_time', 'N/A')}</p>
-                    <p><strong>Reference:</strong> {original_booking.get('booking_reference', 'N/A')}</p>
+                    <p><strong>Facility:</strong> {original_booking.get('facility_name', 'Unknown Facility')}</p>
+                    <p><strong>Date:</strong> {original_booking.get('booking_date', 'Unknown Date')}</p>
+                    <p><strong>Time:</strong> {original_booking.get('start_time', 'Unknown Time')} - {original_booking.get('end_time', 'Unknown Time')}</p>
+                    <p><strong>Purpose:</strong> {original_booking.get('purpose', 'Unknown Purpose')}</p>
                 </div>
                 
                 <div class="overlap-details">
                     <h3>🏛️ Official Booking Details</h3>
-                    <p><strong>Official:</strong> {official_booking.get('official_name', 'Barangay Official')}</p>
-                    <p><strong>Facility:</strong> {official_booking.get('facility_name', 'N/A')}</p>
-                    <p><strong>Date:</strong> {official_booking.get('booking_date', 'N/A')}</p>
-                    <p><strong>Time:</strong> {official_booking.get('start_time', 'N/A')} - {official_booking.get('end_time', 'N/A')}</p>
+                    <p><strong>Official:</strong> {official_booking.get('official_name', 'Unknown Official')}</p>
+                    <p><strong>Official Contact:</strong> {official_booking.get('official_contact', '0912-345-6789')}</p>
+                    <p><strong>Facility:</strong> {official_booking.get('facility_name', 'Unknown Facility')}</p>
+                    <p><strong>Date:</strong> {official_booking.get('booking_date', 'Unknown Date')}</p>
+                    <p><strong>Time:</strong> {official_booking.get('start_time', 'Unknown Time')} - {official_booking.get('end_time', 'Unknown Time')}</p>
                     <p><strong>Purpose:</strong> {official_booking.get('purpose', 'Official Barangay Business')}</p>
                 </div>
                 
@@ -623,12 +650,19 @@ class EmailService:
                 
                 <h3>🔄 Next Steps:</h3>
                 <ul>
-                    <li>📞 You will be contacted to reschedule your booking</li>
+                    <li>📞 Contact customer service for rescheduling assistance</li>
                     <li>💰 If applicable, refund will be processed automatically</li>
                     <li>📋 Priority booking will be offered for your next request</li>
                 </ul>
                 
-                <p>If you have any questions or concerns, please contact the barangay office immediately.</p>
+                <div style="background: #e7f3ff; border: 1px solid #b3d9ff; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                    <h3>📞 Customer Service Contact</h3>
+                    <p><strong>For immediate assistance, please contact:</strong></p>
+                    <p>📱 <strong>Hotline:</strong> 0912-345-6789</p>
+                    <p>📧 <strong>Email:</strong> barangay.service@gmail.com</p>
+                    <p>🏢 <strong>Office:</strong> Barangay Hall (8:00 AM - 5:00 PM)</p>
+                    <p><em>Please mention your name and booking date for faster service.</em></p>
+                </div>
             </div>
             
             <div class="footer">

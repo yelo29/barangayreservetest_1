@@ -19,6 +19,7 @@ def test_new_email_functions():
         'booking_date': '2026-03-10',
         'start_time': '14:00',
         'end_time': '16:00',
+        'purpose': 'Resident Basketball Game',
         'booking_reference': 'BK-2026-03-001'
     }
     

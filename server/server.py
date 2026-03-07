@@ -848,7 +848,8 @@ def create_booking():
                 # For ALL DAY bookings, find ALL resident bookings on this date
                 print(f"🔍 DEBUG: ALL DAY query - facility_id: {data['facility_id']}, date: {data['date']}, user_id: {user_id}")
                 cursor.execute('''
-                    SELECT b.id, b.user_id, b.start_time, b.end_time, b.status, u.email as user_email, u.full_name
+                    SELECT b.id, b.user_id, b.start_time, b.end_time, b.status, b.purpose, b.booking_reference,
+                           u.email as user_email, u.full_name
                     FROM bookings b
                     LEFT JOIN users u ON b.user_id = u.id
                     WHERE b.facility_id = ? 
@@ -860,7 +861,8 @@ def create_booking():
             else:
                 # For specific time slots, find exact matches
                 cursor.execute('''
-                    SELECT b.id, b.user_id, b.start_time, b.end_time, b.status, u.email as user_email, u.full_name
+                    SELECT b.id, b.user_id, b.start_time, b.end_time, b.status, b.purpose, b.booking_reference,
+                           u.email as user_email, u.full_name
                     FROM bookings b
                     LEFT JOIN users u ON b.user_id = u.id
                     WHERE b.facility_id = ? 
@@ -880,9 +882,10 @@ def create_booking():
             facility_name = facility_result[0] if facility_result else 'Unknown Facility'
             
             # Get official user details for emails
-            cursor.execute('SELECT full_name FROM users WHERE id = ?', (user_id,))
+            cursor.execute('SELECT full_name, contact_number FROM users WHERE id = ?', (user_id,))
             official_result = cursor.fetchone()
             official_name = official_result[0] if official_result else 'Barangay Official'
+            official_contact = official_result[1] if official_result and len(official_result) > 1 else '0912-345-6789'
             
             # Auto-reject overlapping resident bookings with proper email service
             for booking in overlapping_bookings:
@@ -892,67 +895,66 @@ def create_booking():
                 resident_start_time = booking[2]
                 resident_end_time = booking[3]
                 resident_status = booking[4]  # Get original status (pending/approved)
-                booking_reference = booking[7] if len(booking) > 7 else f'BR{booking_id}'
+                resident_purpose = booking[5] if len(booking) > 5 and booking[5] else 'Resident booking'
+                booking_reference = booking[6] if len(booking) > 6 and booking[6] else f'BR{booking_id}'
+                resident_email = booking[7] if len(booking) > 7 and booking[7] else 'unknown@email.com'
+                resident_name = booking[8] if len(booking) > 8 and booking[8] else 'Unknown Resident'
                 
                 print(f"🚫 AUTO-REJECTING {resident_status.upper()} booking {booking_id} - Time: {resident_start_time}")
                 
-                # Get resident details for email
-                cursor.execute('SELECT email, full_name FROM users WHERE id = ?', (resident_user_id,))
-                resident = cursor.fetchone()
+                # Validate data before sending email
+                if not resident_email or resident_email == 'unknown@email.com':
+                    print(f"⚠️ WARNING: Invalid email for resident {resident_user_id}: {resident_email}")
+                    continue
                 
-                if resident:
-                    resident_email = resident[0]
-                    resident_name = resident[1]
+                if not resident_name or resident_name == 'Unknown Resident':
+                    print(f"⚠️ WARNING: Invalid name for resident {resident_user_id}: {resident_name}")
+                    continue
                     
-                    # Prepare booking details for overlap email
-                    overlap_booking_details = {
-                        'facility_name': facility_name,
-                        'booking_date': data['date'],
-                        'timeslot': f"{resident_start_time} - {resident_end_time}",
-                        'start_time': resident_start_time,
-                        'end_time': resident_end_time,
-                        'purpose': 'Resident booking',
-                        'status': 'rejected',
-                        'booking_reference': booking_reference,
-                        'submitted_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                    }
+                # Prepare booking details for overlap email
+                overlap_booking_details = {
+                    'facility_name': facility_name,
+                    'booking_date': data['date'],
+                    'timeslot': f"{resident_start_time} - {resident_end_time}",
+                    'start_time': resident_start_time,
+                    'end_time': resident_end_time,
+                    'purpose': resident_purpose,  # Use actual purpose from database
+                    'status': 'rejected',
+                    'booking_reference': booking_reference,
+                    'submitted_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                }
+                
+                # Prepare official booking details for email
+                official_booking_details = {
+                    'facility_name': facility_name,
+                    'booking_date': data['date'],
+                    'timeslot': 'ALL DAY',
+                    'start_time': 'ALL DAY',
+                    'end_time': 'ALL DAY',
+                    'purpose': data.get('purpose', 'Official barangay business'),
+                    'status': 'approved',
+                    'booking_reference': f'BR{datetime.now().strftime("%Y%m%d%H%M%S")}{user_id}',
+                    'official_name': official_name,
+                    'official_contact': official_contact,
+                    'submitted_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                }
+                
+                # Send overlap email to resident
+                try:
+                    from email_service import EmailService
+                    email_service = EmailService()
                     
-                    # Get actual resident booking purpose
-                    cursor.execute('SELECT purpose FROM bookings WHERE id = ?', (booking_id,))
-                    purpose_result = cursor.fetchone()
-                    if purpose_result:
-                        overlap_booking_details['purpose'] = purpose_result[0]
+                    overlap_sent = email_service.send_booking_overlap_email(
+                        resident_email=resident_email,
+                        resident_name=resident_name,
+                        original_booking=overlap_booking_details,
+                        official_booking=official_booking_details
+                    )
                     
-                    # Prepare official booking details for email
-                    official_booking_details = {
-                        'facility_name': facility_name,
-                        'booking_date': data['date'],
-                        'timeslot': 'ALL DAY',
-                        'start_time': 'ALL DAY',
-                        'end_time': 'ALL DAY',
-                        'purpose': data.get('purpose', 'Official barangay business'),
-                        'status': 'approved',
-                        'booking_reference': f'BR{datetime.now().strftime("%Y%m%d%H%M%S")}{user_id}',
-                        'official_name': official_name,
-                        'submitted_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                    }
+                    print(f"📧 Overlap email sent to {resident_email}: {overlap_sent}")
                     
-                    # Send overlap email to resident
-                    try:
-                        from email_service import EmailService
-                        email_service = EmailService()
-                        
-                        overlap_sent = email_service.send_booking_overlap_email(
-                            resident_email=resident_email,
-                            resident_name=resident_name,
-                            original_booking=overlap_booking_details,
-                            official_booking=official_booking_details
-                        )
-                        
-                        print(f"📧 Overlap email sent to {resident_email}: {overlap_sent}")
-                        
-                    except Exception as email_error:
-                        print(f"❌ Error sending overlap email to {resident_email}: {email_error}")
+                except Exception as email_error:
+                    print(f"❌ Error sending overlap email to {resident_email}: {email_error}")
                 
                 # Update resident booking to rejected with proper reason
                 cursor.execute('''
@@ -966,8 +968,8 @@ def create_booking():
                 rejected_resident_bookings.append({
                     'booking_id': booking_id,
                     'booking_reference': booking_reference,
-                    'resident_name': resident_name if resident else 'Unknown Resident',
-                    'resident_email': resident_email if resident else 'unknown@email.com',
+                    'resident_name': resident_name,
+                    'resident_email': resident_email,
                     'original_timeslot': resident_start_time,
                     'original_end_time': resident_end_time.split(' - ')[-1] if ' - ' in resident_end_time else resident_end_time,
                     'original_status': 'rejected',
@@ -2128,7 +2130,12 @@ def get_verification_status(user_id):
         lock_message = ""
         current_status = "none"
         
-        if user['verified'] == 1 and user['verification_type'] == 'resident':  # Verified resident
+        # FIRST PRIORITY: Check if user has pending request - LOCKS EVERYONE
+        if has_pending:
+            can_submit = False  
+            lock_message = "You already submitted a Verification Request! wait for officials to either Reject or Approve your request"
+            current_status = "pending_request"
+        elif user['verified'] == 1 and user['verification_type'] == 'resident':  # Verified resident
             can_submit = False
             lock_message = "You are already verified as a Resident with full benefits"
             current_status = "verified_resident"
@@ -2136,10 +2143,6 @@ def get_verification_status(user_id):
             can_submit = True  # ALLOWED: Can submit to upgrade to resident status
             lock_message = "You can submit a verification request to upgrade to Resident status"
             current_status = "verified_non_resident"
-        elif has_pending:
-            can_submit = False  
-            lock_message = "You already submitted a Verification Request! wait for officials to either Reject or Approve your request"
-            current_status = "pending_request"
         else:  # Unverified resident (verified: 0 or 2)
             can_submit = True
             if user['verified'] == 2:
@@ -2325,6 +2328,43 @@ def verification_requests():
             
             conn.commit()
             conn.close()
+            
+            # Send email notification to officials about the authentication request
+            try:
+                from email_service import EmailService
+                email_service = EmailService()
+                
+                # Prepare resident details for email
+                resident_details = {
+                    'full_name': data.get('fullName', ''),
+                    'email': user_email,
+                    'contact_number': data.get('contactNumber', ''),
+                    'verification_status': 'Pending Verification'
+                }
+                
+                # Prepare request details for email
+                request_details = {
+                    'submitted_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    'reference_number': f"VR-{data.get('residentId')}-{datetime.now().strftime('%Y%m%d%H%M%S')}",
+                    'verification_type': data.get('verificationType', ''),
+                    'discount_rate': '10%' if data.get('verificationType') == 'resident' else '5%',
+                    'address': data.get('address', '')
+                }
+                
+                # Send notification email to officials
+                notification_sent = email_service.send_official_notification_email(
+                    request_type="authentication",
+                    resident_details=resident_details,
+                    request_details=request_details
+                )
+                
+                if notification_sent:
+                    print(f"📧 Authentication request notification sent to officials")
+                else:
+                    print(f"❌ Failed to send authentication request notification")
+                    
+            except Exception as email_error:
+                print(f"❌ Error sending authentication request notification: {email_error}")
             
             print("✅ Verification request created successfully")
             return jsonify({'success': True, 'message': 'Verification request submitted successfully'})
