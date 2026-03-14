@@ -223,8 +223,8 @@ migrate_database()
 
 # API Routes
 
-@app.route('/')
-def home():
+@app.route('/api/status')
+def server_status():
     return jsonify({
         'message': 'Barangay Reserve Server Running!',
         'status': 'online',
@@ -2602,6 +2602,26 @@ def update_verification_request(request_id):
         
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})
+
+@app.route('/')
+def serve_homepage():
+    return send_from_directory('.', 'index.html')
+
+@app.route('/index.html')
+def serve_index():
+    return send_from_directory('.', 'index.html')
+
+@app.route('/privacy.html')
+def serve_privacy():
+    return send_from_directory('.', 'privacy.html')
+
+@app.route('/google86d0cfd16d914651.html')
+def serve_google_verification():
+    return send_from_directory('.', 'google86d0cfd16d914651.html')
+
+@app.route('/terms.html')
+def serve_terms():
+    return send_from_directory('.', 'terms.html')
 
 if __name__ == '__main__':
     print("🚀 Starting Barangay Reserve Server...")
